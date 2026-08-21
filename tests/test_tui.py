@@ -5,7 +5,7 @@ import os
 
 from lexhint import DictionaryEntry, Sense
 
-from dictshow.tui import (
+from dictterm.tui import (
     DictionaryEntryView,
     DictionaryViewerApp,
     _normalize_pos,

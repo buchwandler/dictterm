@@ -5,7 +5,7 @@ from io import StringIO
 from lexhint import DictionaryEntry, Example, Form, Pronunciation, RelatedTerm, Sense
 from rich.console import Console, Group
 
-from dictshow.render import THEME, entry_renderables, render_entries
+from dictterm.render import THEME, entry_renderables, render_entries
 
 
 def test_render_rich_entry() -> None:
@@ -40,7 +40,7 @@ def test_render_rich_entry() -> None:
     assert "synonyms:" in output
 
 
-def test_entry_renderables_do_not_require_dictshow_theme() -> None:
+def test_entry_renderables_do_not_require_dictterm_theme() -> None:
     entry = DictionaryEntry(
         word="word",
         pos="noun",

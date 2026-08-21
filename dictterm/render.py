@@ -21,13 +21,13 @@ RELATION_STYLE = Style(color="magenta")
 
 THEME = Theme(
     {
-        "dictshow.word": "bold",
-        "dictshow.pos": "bold black on bright_cyan",
-        "dictshow.heading": "bold cyan",
-        "dictshow.definition": "bold",
-        "dictshow.meta": "dim",
-        "dictshow.example": "italic dim",
-        "dictshow.relation": "magenta",
+        "dictterm.word": "bold",
+        "dictterm.pos": "bold black on bright_cyan",
+        "dictterm.heading": "bold cyan",
+        "dictterm.definition": "bold",
+        "dictterm.meta": "dim",
+        "dictterm.example": "italic dim",
+        "dictterm.relation": "magenta",
     }
 )
 
@@ -160,12 +160,19 @@ def entry_renderables(entry: DictionaryEntry) -> list[RenderableType]:
     return blocks
 
 
-def render_entries(console: Console, word: str, entries: Sequence[DictionaryEntry]) -> None:
+def render_entries(
+    console: Console,
+    word: str,
+    entries: Sequence[DictionaryEntry],
+    *,
+    empty_message: str | None = None,
+) -> None:
     """Render dictionary entries without owning any dictionary-data policy."""
     if not entries:
-        message = Text("No dictionary entry found for ")
-        message.append(repr(word), style="bold")
-        message.append(".")
+        message = Text(empty_message or "No dictionary entry found for ")
+        if empty_message is None:
+            message.append(repr(word), style="bold")
+            message.append(".")
         console.print(message)
         return
 

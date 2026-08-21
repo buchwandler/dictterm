@@ -3,7 +3,7 @@ requires = ["setuptools>=80", "setuptools-scm>=9.2"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "dictshow"
+name = "dictterm"
 dynamic = ["version"]
 description = "A polished offline dictionary CLI powered by lexhint"
 readme = "README.md"
@@ -40,17 +40,17 @@ dev = [
 ]
 
 [project.scripts]
-dictshow = "dictshow.cli:main"
+dictterm = "dictterm.cli:main"
 
 [tool.setuptools]
 include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["dictshow*"]
+include = ["dictterm*"]
 
 [tool.setuptools.package-data]
-dictshow = ["py.typed"]
+dictterm = ["py.typed"]
 
 [tool.setuptools_scm]
 # Versions come from Git tags. A source tree without SCM metadata must not
