@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from io import StringIO
 
-from lexhint import DictionaryEntry, Example, Form, Pronunciation, Sense
+from lexhint import DictionaryEntry, Example, Form, Pronunciation, RelatedTerm, Sense
 from rich.console import Console, Group
 
 from dictshow.render import THEME, entry_renderables, render_entries
@@ -52,3 +52,25 @@ def test_entry_renderables_do_not_require_dictshow_theme() -> None:
     console.print(Group(*entry_renderables(entry)))
 
     assert "A definition." in stream.getvalue()
+
+
+def test_render_structured_related_terms() -> None:
+    entry = DictionaryEntry(
+        word="love",
+        pos="noun",
+        senses=(
+            Sense(
+                glosses=("A strong feeling of affection.",),
+                synonyms=(RelatedTerm("affection", "synonym", ("formal",)),),
+                antonyms=(RelatedTerm("hate", "antonym"),),
+            ),
+        ),
+    )
+    stream = StringIO()
+    console = Console(file=stream, force_terminal=False, no_color=True, width=80)
+
+    render_entries(console, "love", (entry,))
+
+    output = stream.getvalue()
+    assert "synonyms: formal: affection" in output
+    assert "antonyms: hate" in output

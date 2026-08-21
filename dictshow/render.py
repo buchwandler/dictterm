@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from lexhint import DictionaryEntry, Example, Form, Pronunciation, Sense
+from lexhint import DictionaryEntry, Example, Form, Pronunciation, RelatedTerm, Sense
 from rich.console import Console, Group, RenderableType
 from rich.padding import Padding
 from rich.rule import Rule
@@ -73,6 +73,20 @@ def _example(example: Example) -> Text:
     return text
 
 
+def _relations(label: str, values: Sequence[str | RelatedTerm]) -> Text:
+    text = Text(f"{label}: ", style=RELATION_STYLE)
+    for index, value in enumerate(values):
+        if index:
+            text.append(", ")
+        if isinstance(value, RelatedTerm):
+            if value.tags:
+                text.append(", ".join(value.tags) + ": ", style=META_STYLE)
+            text.append(value.word)
+        else:
+            text.append(value)
+    return text
+
+
 def _sense(index: int, sense: Sense) -> RenderableType:
     parts: list[RenderableType] = []
     glosses = sense.glosses or ("(no definition)",)
@@ -96,13 +110,9 @@ def _sense(index: int, sense: Sense) -> RenderableType:
         parts.append(Padding(_example(example), (0, 0, 0, 3)))
 
     if sense.synonyms:
-        synonyms = Text("synonyms: ", style=RELATION_STYLE)
-        synonyms.append(", ".join(sense.synonyms))
-        parts.append(Padding(synonyms, (0, 0, 0, 3)))
+        parts.append(Padding(_relations("synonyms", sense.synonyms), (0, 0, 0, 3)))
     if sense.antonyms:
-        antonyms = Text("antonyms: ", style=RELATION_STYLE)
-        antonyms.append(", ".join(sense.antonyms))
-        parts.append(Padding(antonyms, (0, 0, 0, 3)))
+        parts.append(Padding(_relations("antonyms", sense.antonyms), (0, 0, 0, 3)))
 
     return Group(*parts)
 
