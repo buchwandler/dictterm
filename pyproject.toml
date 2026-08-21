@@ -1,0 +1,68 @@
+[build-system]
+requires = ["setuptools>=80", "setuptools-scm>=9.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dictshow"
+dynamic = ["version"]
+description = "A polished offline dictionary CLI powered by lexhint"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+keywords = ["dictionary", "cli", "terminal", "wiktionary", "offline", "lexhint"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: End Users/Desktop",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Text Processing :: Linguistic",
+]
+dependencies = [
+  "lexhint>=0.1.0",
+  "rich>=13.9",
+]
+
+[project.optional-dependencies]
+dev = [
+  "build>=1",
+  "pytest>=8",
+  "ruff>=0.16,<0.17",
+  "setuptools-scm>=9.2",
+  "twine>=5",
+]
+
+[project.scripts]
+dictshow = "dictshow.cli:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["dictshow*"]
+
+[tool.setuptools.package-data]
+dictshow = ["py.typed"]
+
+[tool.setuptools_scm]
+# Versions come from Git tags. A source tree without SCM metadata must not
+# masquerade as an official release.
+fallback_version = "0+unknown"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
