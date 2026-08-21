@@ -6,9 +6,18 @@ from lexhint import DictionaryEntry, Example, Form, Pronunciation, Sense
 from rich.console import Console, Group, RenderableType
 from rich.padding import Padding
 from rich.rule import Rule
+from rich.style import Style
 from rich.table import Table
 from rich.text import Text
 from rich.theme import Theme
+
+WORD_STYLE = Style(bold=True)
+POS_STYLE = Style(bold=True, color="black", bgcolor="bright_cyan")
+HEADING_STYLE = Style(bold=True, color="cyan")
+DEFINITION_STYLE = Style(bold=True)
+META_STYLE = Style(dim=True)
+EXAMPLE_STYLE = Style(italic=True, dim=True)
+RELATION_STYLE = Style(color="magenta")
 
 THEME = Theme(
     {
@@ -24,14 +33,14 @@ THEME = Theme(
 
 
 def _heading(title: str) -> Text:
-    return Text(title, style="dictshow.heading")
+    return Text(title, style=HEADING_STYLE)
 
 
 def _tagged_value(value: str, tags: Sequence[str]) -> Text:
     text = Text(value)
     if tags:
         text.append("  ")
-        text.append(", ".join(tags), style="dictshow.meta")
+        text.append(", ".join(tags), style=META_STYLE)
     return text
 
 
@@ -39,7 +48,7 @@ def _forms(forms: Sequence[Form]) -> RenderableType | None:
     if not forms:
         return None
     rows = Table.grid(padding=(0, 1))
-    rows.add_column(style="dictshow.meta", no_wrap=True)
+    rows.add_column(style=META_STYLE, no_wrap=True)
     rows.add_column()
     for form in forms:
         label = ", ".join(form.tags) if form.tags else "form"
@@ -55,12 +64,12 @@ def _pronunciations(values: Sequence[Pronunciation]) -> RenderableType | None:
 
 
 def _example(example: Example) -> Text:
-    text = Text("“", style="dictshow.example")
-    text.append(example.text, style="dictshow.example")
-    text.append("”", style="dictshow.example")
+    text = Text("“", style=EXAMPLE_STYLE)
+    text.append(example.text, style=EXAMPLE_STYLE)
+    text.append("”", style=EXAMPLE_STYLE)
     if example.translation:
-        text.append(" — ", style="dictshow.meta")
-        text.append(example.translation, style="dictshow.meta")
+        text.append(" — ", style=META_STYLE)
+        text.append(example.translation, style=META_STYLE)
     return text
 
 
@@ -69,17 +78,17 @@ def _sense(index: int, sense: Sense) -> RenderableType:
     glosses = sense.glosses or ("(no definition)",)
 
     first = Text()
-    first.append(f"{index}. ", style="dictshow.meta")
-    first.append(glosses[0], style="dictshow.definition")
+    first.append(f"{index}. ", style=META_STYLE)
+    first.append(glosses[0], style=DEFINITION_STYLE)
     parts.append(first)
 
     for gloss in glosses[1:]:
         parts.append(Padding(Text(gloss), (0, 0, 0, 3)))
 
     if sense.tags:
-        parts.append(Padding(Text(", ".join(sense.tags), style="dictshow.meta"), (0, 0, 0, 3)))
+        parts.append(Padding(Text(", ".join(sense.tags), style=META_STYLE), (0, 0, 0, 3)))
     if sense.topics:
-        topics = Text("topics: ", style="dictshow.meta")
+        topics = Text("topics: ", style=META_STYLE)
         topics.append(", ".join(sense.topics))
         parts.append(Padding(topics, (0, 0, 0, 3)))
 
@@ -87,11 +96,11 @@ def _sense(index: int, sense: Sense) -> RenderableType:
         parts.append(Padding(_example(example), (0, 0, 0, 3)))
 
     if sense.synonyms:
-        synonyms = Text("synonyms: ", style="dictshow.relation")
+        synonyms = Text("synonyms: ", style=RELATION_STYLE)
         synonyms.append(", ".join(sense.synonyms))
         parts.append(Padding(synonyms, (0, 0, 0, 3)))
     if sense.antonyms:
-        antonyms = Text("antonyms: ", style="dictshow.relation")
+        antonyms = Text("antonyms: ", style=RELATION_STYLE)
         antonyms.append(", ".join(sense.antonyms))
         parts.append(Padding(antonyms, (0, 0, 0, 3)))
 
@@ -111,8 +120,8 @@ def _entry_header(entry: DictionaryEntry) -> Table:
     header = Table.grid(padding=(0, 2))
     header.add_column(no_wrap=True)
     header.add_column()
-    pos = Text(f" {entry.pos.upper()} ", style="dictshow.pos")
-    word = Text(entry.word, style="dictshow.word")
+    pos = Text(f" {entry.pos.upper()} ", style=POS_STYLE)
+    word = Text(entry.word, style=WORD_STYLE)
     header.add_row(pos, word)
     return header
 

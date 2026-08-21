@@ -3,9 +3,9 @@ from __future__ import annotations
 from io import StringIO
 
 from lexhint import DictionaryEntry, Example, Form, Pronunciation, Sense
-from rich.console import Console
+from rich.console import Console, Group
 
-from dictshow.render import THEME, render_entries
+from dictshow.render import THEME, entry_renderables, render_entries
 
 
 def test_render_rich_entry() -> None:
@@ -38,3 +38,17 @@ def test_render_rich_entry() -> None:
     assert "Definitions" in output
     assert "lavish praise" in output
     assert "synonyms:" in output
+
+
+def test_entry_renderables_do_not_require_dictshow_theme() -> None:
+    entry = DictionaryEntry(
+        word="word",
+        pos="noun",
+        senses=(Sense(glosses=("A definition.",)),),
+    )
+    stream = StringIO()
+    console = Console(file=stream, force_terminal=False, no_color=True, width=80)
+
+    console.print(Group(*entry_renderables(entry)))
+
+    assert "A definition." in stream.getvalue()

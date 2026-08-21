@@ -1,17 +1,19 @@
 # dictshow
 
-`dictshow` is a small offline dictionary CLI. **Lexhint owns datasets and dictionary access;
-dictshow owns terminal presentation.**
+`dictshow` is an offline dictionary CLI with an interactive terminal viewer. **Lexhint owns
+datasets and dictionary access; dictshow owns terminal presentation.**
 
-The initial renderer is intentionally close to the clean `rdict` style: a compact part-of-speech
-badge and word header, followed by pronunciation, etymology, forms, definitions, examples, and
-relations when Lexhint provides them.
+The renderer is intentionally close to the clean `rdict` style: a compact part-of-speech badge and
+word header, followed by pronunciation, etymology, forms, definitions, examples, and relations when
+Lexhint provides them. Interactive navigation keeps large results at the first entry instead of
+leaving the user at the end of terminal scrollback.
 
 ## Requirements
 
 - Python 3.10+
 - `lexhint>=0.1.0`
-- `rich>=13.9`
+- `rich>=14.2`
+- `textual>=8.2.8,<9`
 - a Lexhint **rich** dataset for the language you want to query
 
 ## Install
@@ -37,21 +39,41 @@ dictshow lavish
 
 ```text
 dictshow WORD [-l LANGUAGE] [--dataset-version VERSION] [--path FILE]
-              [--width COLUMNS] [--no-color]
+              [--width COLUMNS] [--no-color] [--plain | --tui]
 ```
 
 Examples:
 
 ```bash
-dictshow lavish
+dictshow lavish                 # interactive viewer in a terminal
 dictshow love -l en
 dictshow Haus -l de
 dictshow compiler --dataset-version 2026.08.20
 dictshow compiler --path ./lexhint-en.sqlite3
+dictshow love --plain         # one-shot output
+dictshow love --plain | less -R
 ```
 
-By default, `dictshow` asks Lexhint for the installed `rich` artifact. It does **not** download,
-update, build, or mutate datasets. If the rich artifact is missing, the CLI points the user to:
+In a terminal, `dictshow` opens the interactive viewer by default. Use `--plain` for deterministic
+one-shot Rich output. Piped, redirected, captured, and non-interactive input/output automatically use
+plain mode. `--tui` forces the viewer and requires both stdin and stdout to be terminals.
+
+Viewer keys:
+
+| Key | Action |
+| --- | --- |
+| Arrow keys, mouse wheel | Scroll |
+| Page Up / Page Down | Page scroll |
+| Home / End | Document start / end |
+| `j` / `k` | Scroll down / up |
+| `[` / `]` | Previous / next dictionary entry |
+| `n` / `v` | First noun / verb entry |
+| `1` through `9` | Jump to indexed entry |
+| `q` | Quit |
+| `?` | Show key help |
+
+The CLI asks Lexhint for the installed `rich` artifact. It does **not** download, update, build, or
+mutate datasets. If the rich artifact is missing, the CLI points the user to:
 
 ```bash
 lexhint dataset download en --variant rich
@@ -81,6 +103,7 @@ dictshow/
 │   ├── __main__.py
 │   ├── cli.py
 │   ├── render.py
+│   ├── tui.py
 │   └── py.typed
 ├── tests/
 ├── LICENSE

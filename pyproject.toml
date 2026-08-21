@@ -26,7 +26,8 @@ classifiers = [
 ]
 dependencies = [
   "lexhint>=0.1.0",
-  "rich>=13.9",
+  "rich>=14.2",
+  "textual>=8.2.8,<9",
 ]
 
 [project.optional-dependencies]

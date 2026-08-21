@@ -43,6 +43,17 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--width", type=int, help="override terminal render width")
     parser.add_argument("--no-color", action="store_true", help="disable terminal colors")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--plain",
+        action="store_true",
+        help="force one-shot Rich output even in a terminal",
+    )
+    mode.add_argument(
+        "--tui",
+        action="store_true",
+        help="force the interactive viewer; requires a terminal",
+    )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     return parser
 
@@ -70,6 +81,16 @@ def _lookup(args: argparse.Namespace):
     return lexicon.entries(args.word)
 
 
+def _use_tui(args: argparse.Namespace) -> bool:
+    if args.plain:
+        return False
+    if args.tui:
+        if not (sys.stdin.isatty() and sys.stdout.isatty()):
+            raise ValueError("--tui requires an interactive terminal")
+        return True
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(list(sys.argv[1:] if argv is None else argv))
     if args.width is not None and args.width < 40:
@@ -80,6 +101,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         entries = _lookup(args)
+        use_tui = _use_tui(args)
     except (
         LexiconCapabilityError,
         LexiconCoverageError,
@@ -99,5 +121,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             err.print(hint)
         return 2
 
-    render_entries(out, args.word, entries)
-    return 0 if entries else 1
+    if not entries:
+        render_entries(out, args.word, entries)
+        return 1
+    if use_tui:
+        from .tui import run_viewer
+        run_viewer(
+            args.word,
+            entries,
+            width=args.width,
+            no_color=args.no_color,
+        )
+    else:
+        render_entries(out, args.word, entries)
+    return 0
