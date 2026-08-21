@@ -1,9 +1,9 @@
 [codecrate]
-output = "context_dictshow.md"
+output = "context_dictterm.md"
 keep_docstrings = true
 dedupe = true
 respect_gitignore = true
-exclude = ["*/.venv/*", "context_dictshow.*"]
+exclude = ["*/.venv/*", "context_dictterm.*"]
 include = [
   "**/*.py",
   "**/*.toml",

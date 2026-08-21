@@ -216,4 +216,4 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
-context_dictshow*.*
+context_dictterm*.*
