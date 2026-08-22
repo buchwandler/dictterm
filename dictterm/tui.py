@@ -1,26 +1,39 @@
 from __future__ import annotations
 
 import os
+import threading
 from collections import defaultdict
 from collections.abc import Sequence
 from contextlib import contextmanager
 
-from lexhint import DictionaryEntry
-from rich.console import Group
+from lexhint import DictionaryEntry, Sense
 from rich.style import Style
 from rich.text import Text
 from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Vertical, VerticalScroll
+from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.message import Message
 from textual.screen import ModalScreen
 from textual.timer import Timer
 from textual.widgets import Footer, Input, OptionList, Static
 from textual.widgets.option_list import Option
 
 from .backend import DictionaryBackend
-from .render import entry_renderables
+from .config import TTSConfig
+from .render import _entry_header
 from .selection import normalize_pos
+from .speech import (
+    PyKokoroSpeechService,
+    SpeechError,
+    SpeechPlaybackError,
+    SpeechRequest,
+    SpeechSynthesisError,
+    SpeechUnavailable,
+    spoken_definition,
+    spoken_definitions,
+    spoken_forms,
+)
 
 _normalize_pos = normalize_pos
 
@@ -93,7 +106,39 @@ Screen {
 .dictionary-entry {
     width: 1fr;
     height: auto;
-    padding: 1 1;
+    padding: 1 1 3 1;
+}
+
+
+.semantic-section, .definitions-section, .sense-view {
+    width: 1fr;
+    height: auto;
+}
+
+
+.semantic-row {
+    width: 1fr;
+    height: auto;
+}
+
+
+.semantic-content {
+    width: 1fr;
+    height: auto;
+}
+
+
+.read-control {
+    width: 3;
+    min-width: 3;
+    height: 1;
+    padding: 0;
+    content-align: center middle;
+}
+
+
+.read-control:focus {
+    text-style: reverse;
 }
 
 HelpScreen {
@@ -155,18 +200,185 @@ def _help_text() -> Text:
     return text
 
 
-class DictionaryEntryView(Static):
-    """One complete Lexhint dictionary entry rendered with Rich."""
+class ReadRequested(Message):
+    def __init__(self, request: SpeechRequest) -> None:
+        super().__init__()
+        self.request = request
 
-    def __init__(self, entry: DictionaryEntry, index: int) -> None:
-        super().__init__(
-            Group(*entry_renderables(entry)),
-            markup=False,
-            id=f"entry-{index}",
-            classes="dictionary-entry",
+
+class ReadControl(Static):
+    can_focus = True
+    BINDINGS = [Binding("enter", "activate", "Read", show=False)]
+
+    def __init__(self, request: SpeechRequest, **kwargs: object) -> None:
+        super().__init__("▶", classes="read-control", markup=False, **kwargs)
+        self.request = request
+
+    def action_activate(self) -> None:
+        self.post_message(ReadRequested(self.request))
+
+    def on_click(self, event: events.Click) -> None:
+        event.stop()
+        self.action_activate()
+
+
+def _request(
+    config: TTSConfig,
+    entry: DictionaryEntry,
+    entry_index: int,
+    kind: str,
+    text: str,
+    *,
+    sense_index: int | None = None,
+    example_index: int | None = None,
+) -> SpeechRequest | None:
+    if not config.enabled:
+        return None
+    return SpeechRequest(
+        id=f"entry-{entry_index}-{kind}-{sense_index}-{example_index}",
+        text=text,
+        language=config.language,
+        kind=kind,
+        entry_index=entry_index,
+        sense_index=sense_index,
+        example_index=example_index,
+    )
+
+
+class SemanticSection(Vertical):
+    def __init__(
+        self,
+        title: str,
+        body: Text,
+        request: SpeechRequest | None = None,
+    ) -> None:
+        super().__init__(classes="semantic-section")
+        self.title = title
+        self.body = body
+        self.request = request
+
+    def compose(self) -> ComposeResult:
+        with Horizontal(classes="semantic-row"):
+            yield Static(Text(self.title, style="bold cyan"), classes="semantic-content")
+            if self.request is not None:
+                yield ReadControl(self.request)
+        yield Static(self.body, classes="semantic-content")
+
+
+class SenseView(Vertical):
+    def __init__(
+        self,
+        sense: Sense,
+        entry: DictionaryEntry,
+        entry_index: int,
+        sense_index: int,
+        config: TTSConfig,
+    ) -> None:
+        super().__init__(classes="sense-view")
+        self.sense = sense
+        self.entry = entry
+        self.entry_index = entry_index
+        self.sense_index = sense_index
+        self.config = config
+
+    def compose(self) -> ComposeResult:
+        definition = Text(f"{self.sense_index + 1}. {spoken_definition(self.sense)}")
+        definition_request = _request(
+            self.config,
+            self.entry,
+            self.entry_index,
+            "definition",
+            spoken_definition(self.sense),
+            sense_index=self.sense_index,
         )
+        with Horizontal(classes="semantic-row"):
+            yield Static(definition, classes="semantic-content")
+            if definition_request is not None:
+                yield ReadControl(definition_request)
+        for example_index, example in enumerate(self.sense.examples):
+            example_request = _request(
+                self.config,
+                self.entry,
+                self.entry_index,
+                "example",
+                example.text,
+                sense_index=self.sense_index,
+                example_index=example_index,
+            )
+            with Horizontal(classes="semantic-row"):
+                yield Static(
+                    Text(f"“{example.text}”", style="italic dim"), classes="semantic-content"
+                )
+                if example_request is not None:
+                    yield ReadControl(example_request)
+        if self.sense.tags:
+            yield Static(Text(", ".join(self.sense.tags), style="dim"), classes="semantic-content")
+        if self.sense.topics:
+            yield Static(
+                Text(f"topics: {', '.join(self.sense.topics)}", style="dim"),
+                classes="semantic-content",
+            )
+
+
+class DefinitionsSection(Vertical):
+    def __init__(self, entry: DictionaryEntry, entry_index: int, config: TTSConfig) -> None:
+        super().__init__(classes="definitions-section")
+        self.entry = entry
+        self.entry_index = entry_index
+        self.config = config
+
+    def compose(self) -> ComposeResult:
+        definitions_request = _request(
+            self.config,
+            self.entry,
+            self.entry_index,
+            "definitions",
+            spoken_definitions(self.entry),
+        )
+        with Horizontal(classes="semantic-row"):
+            yield Static(Text("Definitions", style="bold cyan"), classes="semantic-content")
+            if definitions_request is not None:
+                yield ReadControl(definitions_request)
+        for sense_index, sense in enumerate(self.entry.senses):
+            yield SenseView(sense, self.entry, self.entry_index, sense_index, self.config)
+
+
+class DictionaryEntryView(Vertical):
+    """One complete Lexhint dictionary entry made from semantic child widgets."""
+
+    def __init__(
+        self, entry: DictionaryEntry, index: int, tts_config: TTSConfig | None = None
+    ) -> None:
+        super().__init__(id=f"entry-{index}", classes="dictionary-entry")
         self.entry = entry
         self.index = index
+        self.tts_config = tts_config or TTSConfig()
+
+    def compose(self) -> ComposeResult:
+        yield Static(_entry_header(self.entry), markup=False, classes="entry-header")
+        if self.entry.pronunciations:
+            yield SemanticSection(
+                "Pronunciation",
+                Text("\n".join(item.ipa for item in self.entry.pronunciations), style="dim"),
+                _request(self.tts_config, self.entry, self.index, "headword", self.entry.word),
+            )
+        if self.entry.etymology:
+            yield SemanticSection(
+                "Etymology",
+                Text(self.entry.etymology),
+                _request(
+                    self.tts_config, self.entry, self.index, "etymology", self.entry.etymology
+                ),
+            )
+        if self.entry.forms:
+            yield SemanticSection(
+                "Forms",
+                Text(spoken_forms(self.entry)),
+                _request(
+                    self.tts_config, self.entry, self.index, "forms", spoken_forms(self.entry)
+                ),
+            )
+        yield DefinitionsSection(self.entry, self.index, self.tts_config)
 
 
 class HelpScreen(ModalScreen[None]):
@@ -362,6 +574,7 @@ class DictionaryViewerApp(App[None]):
         word: str | None = None,
         width: int | None = None,
         no_color: bool = False,
+        tts_config: TTSConfig | None = None,
         open_lookup_on_mount: bool = False,
     ) -> None:
         super().__init__()
@@ -374,7 +587,12 @@ class DictionaryViewerApp(App[None]):
         self.entries = tuple(entries)
         self.width = width
         self.no_color = no_color
+        self.tts_config = tts_config or TTSConfig()
         self.open_lookup_on_mount = open_lookup_on_mount
+        self._speech_service: PyKokoroSpeechService | None = None
+        self._speech_generation = 0
+        self._speech_lock = threading.Lock()
+        self._speech_workers: dict[object, int] = {}
         self._active_index = 0
         self._entry_offsets: tuple[float, ...] = ()
         self._entry_heights: tuple[int, ...] = ()
@@ -386,6 +604,58 @@ class DictionaryViewerApp(App[None]):
         if isinstance(self.screen, (LookupScreen, HelpScreen)) and action in _VIEWER_ACTIONS:
             return False
         return super().check_action(action, parameters)
+
+    def _get_speech_service(self) -> PyKokoroSpeechService:
+        if self._speech_service is None:
+            self._speech_service = PyKokoroSpeechService(self.tts_config)
+        return self._speech_service
+
+    def on_read_requested(self, message: ReadRequested) -> None:
+        message.stop()
+        if not self.tts_config.enabled or isinstance(self.screen, (LookupScreen, HelpScreen)):
+            return
+        self._speech_generation += 1
+        generation = self._speech_generation
+        self.notify("Loading TTS model…", timeout=2)
+        worker = self.run_worker(
+            lambda: self._speak_in_worker(message.request, generation),
+            name=f"speech-{generation}",
+            group="speech",
+            exit_on_error=False,
+            thread=True,
+        )
+        self._speech_workers[worker] = generation
+
+    def _speak_in_worker(self, request: SpeechRequest, generation: int) -> None:
+        with self._speech_lock:
+            if generation != self._speech_generation:
+                return
+            self._get_speech_service().speak(request)
+
+    def on_worker_state_changed(self, event) -> None:
+        worker = event.worker
+        if worker not in self._speech_workers:
+            return
+        generation = (
+            self._speech_workers.pop(worker)
+            if event.state.name in {"SUCCESS", "ERROR", "CANCELLED"}
+            else self._speech_workers[worker]
+        )
+        if event.state.name != "ERROR" or generation != self._speech_generation:
+            return
+        error = worker.error
+        if isinstance(
+            error,
+            (SpeechUnavailable, SpeechSynthesisError, SpeechPlaybackError, SpeechError),
+        ):
+            self.notify(str(error), severity="error")
+        elif error is not None:
+            self.notify(f"TTS failed: {error}", severity="error")
+
+    def on_unmount(self) -> None:
+        if self._speech_service is not None:
+            self._speech_service.close()
+            self._speech_service = None
 
     def _reindex_entries(self) -> None:
         pos_to_indices: defaultdict[str, list[int]] = defaultdict(list)
@@ -418,7 +688,7 @@ class DictionaryViewerApp(App[None]):
         yield Static(self._navigation_text(), id="entry-nav", markup=False)
         with EntryScroll(id="entry-scroll"):
             for index, entry in enumerate(self.entries):
-                yield DictionaryEntryView(entry, index)
+                yield DictionaryEntryView(entry, index, self.tts_config)
         yield ViewerFooter()
 
     def on_mount(self) -> None:
@@ -528,7 +798,12 @@ class DictionaryViewerApp(App[None]):
 
     def _mount_replacement(self, entries: tuple[DictionaryEntry, ...]) -> None:
         scroll = self.query_one("#entry-scroll", EntryScroll)
-        scroll.mount(*(DictionaryEntryView(entry, index) for index, entry in enumerate(entries)))
+        scroll.mount(
+            *(
+                DictionaryEntryView(entry, index, self.tts_config)
+                for index, entry in enumerate(entries)
+            )
+        )
         scroll.scroll_home(animate=False, immediate=True)
         self._entry_offsets = ()
         self._entry_heights = ()
@@ -651,6 +926,7 @@ def run_viewer(
     entries: Sequence[DictionaryEntry] = (),
     width: int | None = None,
     no_color: bool = False,
+    tts_config: TTSConfig | None = None,
     open_lookup_on_mount: bool = False,
 ) -> None:
     app = DictionaryViewerApp(
@@ -659,6 +935,7 @@ def run_viewer(
         word=word,
         width=width,
         no_color=no_color,
+        tts_config=tts_config,
         open_lookup_on_mount=open_lookup_on_mount,
     )
     with _temporary_no_color(no_color):

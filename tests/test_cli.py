@@ -226,3 +226,24 @@ def test_custom_dataset_error_does_not_print_install_hint(monkeypatch, capsys) -
 
     assert cli.main(["word", "--path", "custom.sqlite3"]) == 2
     assert "dataset download" not in capsys.readouterr().err
+
+
+def test_config_path_prints_override(tmp_path: Path, capsys) -> None:
+    path = tmp_path / "config.toml"
+    assert cli.main(["--config", str(path), "--config-path"]) == 0
+    assert capsys.readouterr().out.strip() == str(path)
+
+
+def test_init_config_reports_path_and_refuses_overwrite(tmp_path: Path, capsys) -> None:
+    path = tmp_path / "config.toml"
+    assert cli.main(["--config", str(path), "--init-config"]) == 0
+    assert capsys.readouterr().out.strip() == str(path)
+    assert cli.main(["--config", str(path), "--init-config"]) == 2
+    assert "already exists" in capsys.readouterr().err
+
+
+def test_invalid_config_is_controlled_error(tmp_path: Path, capsys) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text("[tts]\nspeed = 0\n")
+    assert cli.main(["--config", str(path), "word"]) == 2
+    assert "greater than 0" in capsys.readouterr().err

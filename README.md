@@ -26,6 +26,13 @@ lexhint dataset download en --variant rich
 dictterm lavish
 ```
 
+Optional direct PyKokoro speech support is installed separately:
+
+```bash
+python -m pip install "dictterm[tts]"
+```
+
+The base `dictterm` installation does not load or require the speech stack.
 For development, while Lexhint is installed from a checkout:
 
 ```bash
@@ -43,6 +50,8 @@ dictterm [WORD] [-l LANGUAGE] [--locale LOCALE]
               [--all-case-variants] [--pos POS[,POS...]]
               [--exclude-pos POS[,POS...]] [--width COLUMNS]
               [--no-color] [--plain | --tui]
+              [--config PATH] [--config-path] [--init-config]
+              [--tts-check]
 ```
 
 Examples:
@@ -59,6 +68,9 @@ dictterm compiler --dataset-version 2026.08.20
 dictterm compiler --path ./lexhint-en.sqlite3
 dictterm love --plain         # one-shot output
 dictterm love --plain | less -R
+dictterm --init-config
+dictterm --config-path
+dictterm --tts-check
 ```
 
 In a terminal, bare `dictterm` opens interactive lookup mode. Type a word to see live candidate
@@ -82,6 +94,7 @@ Viewer keys:
 | `n` / `v`               | Cycle noun / verb entries         |
 | `a` / `r`               | Cycle adjective / adverb entries  |
 | `1` through `9`         | Jump to indexed entry             |
+| Enter on `▶`            | Read focused semantic text (TTS)  |
 | `/`                     | Look up another word              |
 | `q`                     | Quit                              |
 | `?`                     | Open key help (Esc / q closes it) |
@@ -92,6 +105,28 @@ mutate datasets. If the rich artifact is missing, the CLI points the user to:
 ```bash
 lexhint dataset download en --variant rich
 ```
+
+## Configuration and TTS
+
+The optional configuration file is resolved at `$XDG_CONFIG_HOME/dictterm/config.toml`, or at `~/.config/dictterm/config.toml` when `XDG_CONFIG_HOME` is unset. Create a commented starter file with:
+
+```bash
+dictterm --init-config
+```
+
+Configuration values are applied in this order: built-in defaults, TOML, `DICTTERM_*` environment variables, then explicit CLI options. Use `--config PATH` to select a file, and `--config-path` to print the resolved path. Unknown keys and invalid values are rejected.
+
+Enable direct in-memory PyKokoro playback in the `[tts]` table:
+
+```toml
+[tts]
+enabled = true
+voice = "af_heart"
+language = "en-us"
+speed = 1.0
+```
+
+Then run `dictterm --tts-check` and open a word in the TUI. Read controls appear only when TTS is enabled. Speech uses PyKokoro's `AudioResult.play()` directly; no external player, subprocess, temporary WAV, or generated-audio cache is used. `--plain` remains deterministic and never adds speech controls.
 
 ## Exit status
 
@@ -122,9 +157,11 @@ dictterm/
 │   ├── __init__.py
 │   ├── __main__.py
 │   ├── backend.py
+│   ├── config.py
 │   ├── cli.py
 │   ├── render.py
 │   ├── selection.py
+│   ├── speech.py
 │   ├── tui.py
 │   └── py.typed
 ├── tests/
