@@ -98,7 +98,6 @@ def test_live_suggestions_navigation_and_enter_replace_result() -> None:
     asyncio.run(scenario())
 
 
-
 def test_lookup_navigation_isolated_from_background_scroll() -> None:
     async def scenario() -> None:
         backend = FakeBackend()
@@ -123,6 +122,7 @@ def test_lookup_navigation_isolated_from_background_scroll() -> None:
             assert scroll.scroll_y == before
 
     asyncio.run(scenario())
+
 
 def test_escape_preserves_current_result_and_missing_exact_reopens_lookup() -> None:
     async def scenario() -> None:
