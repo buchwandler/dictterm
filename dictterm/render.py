@@ -44,16 +44,23 @@ def _tagged_value(value: str, tags: Sequence[str]) -> Text:
     return text
 
 
+def _form_renderable(form: Form) -> RenderableType:
+    parts: list[RenderableType] = [Text(form.form)]
+    if form.tags:
+        parts.append(
+            Padding(
+                Text(", ".join(form.tags), style=META_STYLE),
+                (0, 0, 0, 2),
+            )
+        )
+    return Group(*parts)
+
+
 def _forms(forms: Sequence[Form]) -> RenderableType | None:
     if not forms:
         return None
-    rows = Table.grid(padding=(0, 1))
-    rows.add_column(style=META_STYLE, no_wrap=True)
-    rows.add_column()
-    for form in forms:
-        label = ", ".join(form.tags) if form.tags else "form"
-        rows.add_row(label, form.form)
-    return Group(_heading("Forms"), Padding(rows, (1, 0, 0, 2)))
+    body = Group(*(_form_renderable(form) for form in forms))
+    return Group(_heading("Forms"), Padding(body, (1, 0, 0, 2)))
 
 
 def _pronunciations(values: Sequence[Pronunciation]) -> RenderableType | None:
