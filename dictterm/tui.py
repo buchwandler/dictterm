@@ -11,16 +11,18 @@ from rich.style import Style
 from rich.text import Text
 from textual import events
 from textual.app import App, ComposeResult
-from textual.containers import VerticalScroll
+from textual.containers import Vertical, VerticalScroll
 from textual.screen import ModalScreen
-from textual.widgets import Footer, Static
+from textual.timer import Timer
+from textual.widgets import Footer, Input, OptionList, Static
+from textual.widgets.option_list import Option
 
+from .backend import DictionaryBackend
 from .render import entry_renderables
 from .selection import normalize_pos
 
 _normalize_pos = normalize_pos
 
-NAV_LABEL_STYLE = Style(bold=True)
 NAV_ACTIVE_STYLE = Style(bold=True, reverse=True)
 NAV_DIM_STYLE = Style(dim=True)
 
@@ -44,6 +46,7 @@ VIEWER_BINDINGS = [
     ("v", "jump_verb", "Verb"),
     ("a", "jump_adjective", "Adjective"),
     ("r", "jump_adverb", "Adverb"),
+    ("/", "lookup", "Lookup"),
     ("?", "help", "Help"),
     ("1", "jump_1", ""),
     ("2", "jump_2", ""),
@@ -60,12 +63,13 @@ HELP_GROUPS = (
     (
         "Navigation",
         (
-            ("↑ / ↓ / j / k", "scroll"),
+            ("up / down / j / k", "scroll"),
             ("PageUp / PageDown", "page"),
-            ("Home / End", "top / bottom"),
+            ("Home / End / g / G", "top / bottom"),
             ("[ / ]", "previous / next entry"),
             ("n / v / a / r", "cycle noun / verb / adjective / adverb"),
             ("1..9", "entry shortcut"),
+            ("/", "look up another word"),
         ),
     ),
     (
@@ -73,7 +77,6 @@ HELP_GROUPS = (
         (("?", "help"), ("q", "quit")),
     ),
 )
-
 
 CSS = """
 Screen {
@@ -108,6 +111,39 @@ HelpScreen {
     padding: 1 2;
     border: round $accent;
     background: $surface;
+}
+
+LookupScreen {
+    align: center middle;
+    background: $background 70%;
+}
+
+#lookup-dialog {
+    width: 80%;
+    max-width: 80;
+    height: auto;
+    max-height: 80%;
+    padding: 1 2;
+    border: round $accent;
+    background: $surface;
+}
+
+#lookup-title {
+    height: auto;
+    padding-bottom: 1;
+}
+
+#lookup-options {
+    height: auto;
+    max-height: 12;
+    min-height: 1;
+    margin-top: 1;
+}
+
+#lookup-status {
+    height: auto;
+    padding-top: 1;
+    color: $text-muted;
 }
 """
 
@@ -151,32 +187,197 @@ class HelpScreen(ModalScreen[None]):
             self.dismiss(None)
 
 
+class LookupScreen(ModalScreen[str | None]):
+    """Modal, hotkey-isolated headword lookup screen."""
+
+    BINDINGS = [
+        ("up", "candidate_up", ""),
+        ("down", "candidate_down", ""),
+        ("pageup", "candidate_page_up", ""),
+        ("pagedown", "candidate_page_down", ""),
+    ]
+
+    def __init__(
+        self,
+        backend: DictionaryBackend,
+        *,
+        seed: str = "",
+        error: str | None = None,
+    ) -> None:
+        super().__init__()
+        self.backend = backend
+        self.seed = seed
+        self.initial_error = error
+        self._initial_error_active = error is not None
+        self._refresh_timer: Timer | None = None
+        self._generation = 0
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="lookup-dialog"):
+            yield Static("Look up a word", id="lookup-title")
+            yield Input(value=self.seed, placeholder="Type a word", id="lookup-input")
+            yield OptionList(id="lookup-options")
+            yield Static("", id="lookup-status")
+
+    def on_mount(self) -> None:
+        input_widget = self.query_one("#lookup-input", Input)
+        input_widget.cursor_position = len(input_widget.value)
+        input_widget.focus()
+        if self.initial_error:
+            self._set_status(self.initial_error, error=True)
+        elif input_widget.value.strip():
+            self._schedule_refresh(input_widget.value.strip())
+        else:
+            self._set_status("Type a word to search.")
+
+    def _set_status(self, message: str, *, error: bool = False) -> None:
+        status = self.query_one("#lookup-status", Static)
+        status.update(Text(message, style="red" if error else "dim"))
+
+    def _schedule_refresh(self, query: str) -> None:
+        self._generation += 1
+        generation = self._generation
+        if self._refresh_timer is not None:
+            self._refresh_timer.stop()
+        self._refresh_timer = self.set_timer(
+            0.1,
+            lambda: self._refresh_suggestions(query, generation),
+        )
+
+    def _refresh_suggestions(self, query: str, generation: int) -> None:
+        current_query = self.query_one("#lookup-input", Input).value.strip()
+        if generation != self._generation or query != current_query:
+            return
+        try:
+            suggestions = tuple(self.backend.suggest(query, limit=20))
+        except Exception as exc:
+            self.query_one("#lookup-options", OptionList).clear_options()
+            self._set_status(f"Lookup error: {exc}", error=True)
+            return
+        options = self.query_one("#lookup-options", OptionList)
+        options.clear_options()
+        if suggestions:
+            options.add_options(Option(word, id=word) for word in suggestions)
+            options.highlighted = 0
+            self._set_status("up/down choose   Enter open   Esc cancel")
+        else:
+            self._set_status(f'No suggestions. Press Enter to try an exact lookup for "{query}".')
+
+    def _selected_word(self) -> str | None:
+        options = self.query_one("#lookup-options", OptionList)
+        if options.highlighted is None:
+            return None
+        option = options.get_option_at_index(options.highlighted)
+        return option.id or str(option.prompt)
+
+    def _submit(self) -> None:
+        input_widget = self.query_one("#lookup-input", Input)
+        typed = input_widget.value.strip()
+        selected = self._selected_word()
+        if selected:
+            self.dismiss(selected)
+            return
+        if typed:
+            self.dismiss(typed)
+            return
+        self._set_status("Type a word to search.")
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        query = event.value.strip()
+        if self._initial_error_active and query == self.seed.strip():
+            if self.initial_error:
+                self._set_status(self.initial_error, error=True)
+            return
+        self._initial_error_active = False
+        options = self.query_one("#lookup-options", OptionList)
+        options.clear_options()
+        if not query:
+            self._generation += 1
+            if self._refresh_timer is not None:
+                self._refresh_timer.stop()
+            self._set_status("Type a word to search.")
+            return
+        self._set_status("Searching...")
+        self._schedule_refresh(query)
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        event.stop()
+        self._submit()
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        event.stop()
+        self.dismiss(event.option.id or str(event.option.prompt))
+
+    def action_candidate_up(self) -> None:
+        self.query_one("#lookup-options", OptionList).action_cursor_up()
+
+    def action_candidate_down(self) -> None:
+        self.query_one("#lookup-options", OptionList).action_cursor_down()
+
+    def action_candidate_page_up(self) -> None:
+        self.query_one("#lookup-options", OptionList).action_page_up()
+
+    def action_candidate_page_down(self) -> None:
+        self.query_one("#lookup-options", OptionList).action_page_down()
+
+    def on_key(self, event: events.Key) -> None:
+        if event.key == "escape":
+            event.stop()
+            self.dismiss(None)
+
+
 class EntryScroll(VerticalScroll):
     def watch_scroll_y(self, old_value: float, new_value: float) -> None:
         if self.app.is_mounted:
             self.app.call_after_refresh(self.app._sync_active_index)
 
 
+class _StaticBackend:
+    def __init__(self, word: str, entries: Sequence[DictionaryEntry]) -> None:
+        self.word = word
+        self._entries = tuple(entries)
+
+    def entries(self, word: str) -> tuple[DictionaryEntry, ...]:
+        return self._entries if word == self.word else ()
+
+    def suggest(self, query: str, *, limit: int = 20) -> tuple[str, ...]:
+        return ()
+
+
 class DictionaryViewerApp(App[None]):
-    """Full-screen viewer for a sequence of Lexhint dictionary entries."""
+    """Full-screen viewer and reusable interactive dictionary session."""
 
     CSS = CSS
     BINDINGS = VIEWER_BINDINGS
 
     def __init__(
         self,
-        word: str,
-        entries: Sequence[DictionaryEntry],
+        backend_or_word: DictionaryBackend | str,
+        entries: Sequence[DictionaryEntry] = (),
         *,
+        word: str | None = None,
         width: int | None = None,
+        no_color: bool = False,
+        open_lookup_on_mount: bool = False,
     ) -> None:
         super().__init__()
-        self.word = word
+        if isinstance(backend_or_word, str):
+            self.backend: DictionaryBackend = _StaticBackend(backend_or_word, entries)
+            self.word = backend_or_word
+        else:
+            self.backend = backend_or_word
+            self.word = word
         self.entries = tuple(entries)
         self.width = width
+        self.no_color = no_color
+        self.open_lookup_on_mount = open_lookup_on_mount
         self._active_index = 0
         self._entry_offsets: tuple[float, ...] = ()
         self._entry_heights: tuple[int, ...] = ()
+        self._pos_to_indices: dict[str, tuple[int, ...]] = {}
+        self._reindex_entries()
+
+    def _reindex_entries(self) -> None:
         pos_to_indices: defaultdict[str, list[int]] = defaultdict(list)
         for index, entry in enumerate(self.entries):
             pos_to_indices[normalize_pos(entry.pos)].append(index)
@@ -190,15 +391,19 @@ class DictionaryViewerApp(App[None]):
         yield Footer()
 
     def on_mount(self) -> None:
-        scroll = self.query_one("#entry-scroll", VerticalScroll)
+        scroll = self.query_one("#entry-scroll", EntryScroll)
         if self.width is not None:
             scroll.styles.width = self.width
         scroll.scroll_home(animate=False, immediate=True)
         self._capture_entry_geometry(scroll)
         self._sync_active_index()
         self._update_navigation()
+        if self.open_lookup_on_mount:
+            self.call_after_refresh(self.action_lookup)
 
     def _navigation_text(self) -> Text:
+        if not self.word:
+            return Text("dictterm  lookup mode")
         if not self.entries:
             return Text(f"dictterm  {self.word}    no entries")
         entry = self.entries[self._active_index]
@@ -211,7 +416,7 @@ class DictionaryViewerApp(App[None]):
             counts[item.pos.upper()] += 1
         text.append("\n", style=NAV_DIM_STYLE)
         text.append(
-            "   ".join(f"{pos} ×{count}" for pos, count in counts.items()),
+            "   ".join(f"{pos} x{count}" for pos, count in counts.items()),
             style=NAV_DIM_STYLE,
         )
         return text
@@ -220,7 +425,7 @@ class DictionaryViewerApp(App[None]):
         self.query_one("#entry-nav", Static).update(self._navigation_text())
 
     def _current_entry_index(self) -> int:
-        scroll = self.query_one("#entry-scroll", VerticalScroll)
+        scroll = self.query_one("#entry-scroll", EntryScroll)
         if not self._entry_heights or not all(self._entry_heights):
             self._capture_entry_geometry(scroll)
         if len(self._entry_offsets) == len(self.entries):
@@ -241,7 +446,7 @@ class DictionaryViewerApp(App[None]):
             return min(visible, key=lambda view: abs(view.region.y - viewport_top)).index
         return self._active_index
 
-    def _capture_entry_geometry(self, scroll: VerticalScroll) -> None:
+    def _capture_entry_geometry(self, scroll: EntryScroll) -> None:
         views = list(self.query(DictionaryEntryView))
         if len(views) != len(self.entries) or not all(view.region.height for view in views):
             return
@@ -262,7 +467,7 @@ class DictionaryViewerApp(App[None]):
         if not 0 <= index < len(self.entries):
             return
         target = self.query_one(f"#entry-{index}", DictionaryEntryView)
-        scroll = self.query_one("#entry-scroll", VerticalScroll)
+        scroll = self.query_one("#entry-scroll", EntryScroll)
         scroll.scroll_to_widget(target, animate=False, top=True, immediate=True)
         self._active_index = index
         self._update_navigation()
@@ -276,28 +481,82 @@ class DictionaryViewerApp(App[None]):
         target = next((index for index in indices if index > current), indices[0])
         self._jump_to_entry(target)
 
+    def _mount_replacement(self, entries: tuple[DictionaryEntry, ...]) -> None:
+        scroll = self.query_one("#entry-scroll", EntryScroll)
+        scroll.mount(*(DictionaryEntryView(entry, index) for index, entry in enumerate(entries)))
+        scroll.scroll_home(animate=False, immediate=True)
+        self._entry_offsets = ()
+        self._entry_heights = ()
+        self.call_after_refresh(self._finish_replacement)
+
+    def _finish_replacement(self) -> None:
+        scroll = self.query_one("#entry-scroll", EntryScroll)
+        scroll.scroll_home(animate=False, immediate=True)
+        self._capture_entry_geometry(scroll)
+        self._update_navigation()
+        self._sync_active_index()
+        scroll.focus()
+
+    def _set_result(self, word: str, entries: Sequence[DictionaryEntry]) -> None:
+        self.word = word
+        self.entries = tuple(entries)
+        self._active_index = 0
+        self._reindex_entries()
+        self._entry_offsets = ()
+        self._entry_heights = ()
+        self._update_navigation()
+        scroll = self.query_one("#entry-scroll", EntryScroll)
+        old_views = list(self.query(DictionaryEntryView))
+        scroll.remove_children(old_views)
+        self.call_after_refresh(lambda: self._mount_replacement(self.entries))
+
+    def _reopen_lookup(self, seed: str, error: str) -> None:
+        self.push_screen(
+            LookupScreen(self.backend, seed=seed, error=error),
+            self._on_lookup_selected,
+        )
+
+    def _on_lookup_selected(self, selected: str | None) -> None:
+        if selected is None:
+            return
+        try:
+            entries = self.backend.entries(selected)
+        except Exception as exc:
+            self._reopen_lookup(selected, f"Lookup error: {exc}")
+            return
+        if not entries:
+            self._reopen_lookup(selected, f'No dictionary entry found for "{selected}".')
+            return
+        self._set_result(selected, entries)
+
+    def action_lookup(self) -> None:
+        self.push_screen(
+            LookupScreen(self.backend, seed=self.word or ""),
+            self._on_lookup_selected,
+        )
+
     def action_scroll_down(self) -> None:
-        self.query_one("#entry-scroll", VerticalScroll).scroll_down()
+        self.query_one("#entry-scroll", EntryScroll).scroll_down()
         self._sync_active_index()
 
     def action_scroll_up(self) -> None:
-        self.query_one("#entry-scroll", VerticalScroll).scroll_up()
+        self.query_one("#entry-scroll", EntryScroll).scroll_up()
         self._sync_active_index()
 
     def action_page_down(self) -> None:
-        self.query_one("#entry-scroll", VerticalScroll).scroll_page_down()
+        self.query_one("#entry-scroll", EntryScroll).scroll_page_down()
         self._sync_active_index()
 
     def action_page_up(self) -> None:
-        self.query_one("#entry-scroll", VerticalScroll).scroll_page_up()
+        self.query_one("#entry-scroll", EntryScroll).scroll_page_up()
         self._sync_active_index()
 
     def action_scroll_home(self) -> None:
-        self.query_one("#entry-scroll", VerticalScroll).scroll_home()
+        self.query_one("#entry-scroll", EntryScroll).scroll_home()
         self._sync_active_index()
 
     def action_scroll_end(self) -> None:
-        self.query_one("#entry-scroll", VerticalScroll).scroll_end()
+        self.query_one("#entry-scroll", EntryScroll).scroll_end()
         self._sync_active_index()
 
     def action_previous_entry(self) -> None:
@@ -357,7 +616,6 @@ def _temporary_no_color(enabled: bool):
     if not enabled or "NO_COLOR" in os.environ:
         yield
         return
-
     os.environ["NO_COLOR"] = "1"
     try:
         yield
@@ -366,12 +624,21 @@ def _temporary_no_color(enabled: bool):
 
 
 def run_viewer(
-    word: str,
-    entries: Sequence[DictionaryEntry],
+    backend: DictionaryBackend,
     *,
+    word: str | None = None,
+    entries: Sequence[DictionaryEntry] = (),
     width: int | None = None,
     no_color: bool = False,
+    open_lookup_on_mount: bool = False,
 ) -> None:
-    app = DictionaryViewerApp(word, entries, width=width)
+    app = DictionaryViewerApp(
+        backend,
+        entries,
+        word=word,
+        width=width,
+        no_color=no_color,
+        open_lookup_on_mount=open_lookup_on_mount,
+    )
     with _temporary_no_color(no_color):
         app.run()

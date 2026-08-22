@@ -38,7 +38,7 @@ dictterm lavish
 ## Usage
 
 ```text
-dictterm WORD [-l LANGUAGE] [--locale LOCALE]
+dictterm [WORD] [-l LANGUAGE] [--locale LOCALE]
               [--dataset-version VERSION] [--path FILE]
               [--all-case-variants] [--pos POS[,POS...]]
               [--exclude-pos POS[,POS...]] [--width COLUMNS]
@@ -48,7 +48,8 @@ dictterm WORD [-l LANGUAGE] [--locale LOCALE]
 Examples:
 
 ```bash
-dictterm lavish                 # interactive viewer in a terminal
+dictterm                          # lookup mode in an interactive terminal
+dictterm lavish                    # open a word in the viewer
 dictterm love -l en
 dictterm Haus -l de
 dictterm color --locale en-US
@@ -60,24 +61,28 @@ dictterm love --plain         # one-shot output
 dictterm love --plain | less -R
 ```
 
-In a terminal, `dictterm` opens the interactive viewer by default. Use `--plain` for deterministic
-one-shot Rich output. Piped, redirected, captured, and non-interactive input/output automatically use
-plain mode. `--tui` forces the viewer and requires both stdin and stdout to be terminals.
+In a terminal, bare `dictterm` opens interactive lookup mode. Type a word to see live candidate
+headwords, use Up/Down to choose one, and press Enter to open it. `dictterm WORD` opens that word
+directly in the viewer. Use `--plain` for deterministic one-shot Rich output; a word is required
+for plain or other non-interactive invocations. Piped, redirected, captured, and non-interactive
+input/output automatically use plain mode. `--tui` forces the viewer and requires both stdin and
+stdout to be terminals.
 
 Viewer keys:
 
-| Key | Action |
-| --- | --- |
-| Arrow keys, mouse wheel | Scroll |
-| Page Up / Page Down | Page scroll |
-| Home / End | Document start / end |
-| `j` / `k` | Scroll down / up |
-| `[` / `]` | Previous / next dictionary entry |
-| `n` / `v` | Cycle noun / verb entries |
-| `a` / `r` | Cycle adjective / adverb entries |
-| `1` through `9` | Jump to indexed entry |
-| `q` | Quit |
-| `?` | Open key help (Esc / q closes it) |
+| Key                     | Action                            |
+| ----------------------- | --------------------------------- |
+| Arrow keys, mouse wheel | Scroll                            |
+| Page Up / Page Down     | Page scroll                       |
+| Home / End              | Document start / end              |
+| `j` / `k`               | Scroll down / up                  |
+| `[` / `]`               | Previous / next dictionary entry  |
+| `n` / `v`               | Cycle noun / verb entries         |
+| `a` / `r`               | Cycle adjective / adverb entries  |
+| `1` through `9`         | Jump to indexed entry             |
+| `/`                     | Look up another word              |
+| `q`                     | Quit                              |
+| `?`                     | Open key help (Esc / q closes it) |
 
 The CLI asks Lexhint for the installed `rich` artifact. It does **not** download, update, build, or
 mutate datasets. If the rich artifact is missing, the CLI points the user to:

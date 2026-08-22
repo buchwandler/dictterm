@@ -17,8 +17,9 @@ from rich.console import Console
 from rich.text import Text
 
 from . import __version__
+from .backend import LexhintBackend
 from .render import THEME, render_entries
-from .selection import filter_entries, parse_pos_list
+from .selection import parse_pos_list
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -26,7 +27,7 @@ def _parser() -> argparse.ArgumentParser:
         prog="dictterm",
         description="Interactive offline dictionary frontend powered by Lexhint.",
     )
-    parser.add_argument("word", help="word to look up")
+    parser.add_argument("word", nargs="?", help="word to look up")
     parser.add_argument(
         "-l",
         "--language",
@@ -86,27 +87,34 @@ def _console(*, no_color: bool, width: int | None, stderr: bool = False) -> Cons
     )
 
 
-def _lookup(args: argparse.Namespace):
+def _open_lexicon(args: argparse.Namespace) -> Lexicon:
     if args.path is not None:
         if args.dataset_version is not None:
             raise ValueError("--path cannot be combined with --dataset-version")
-        lexicon = Lexicon.from_path(
+        return Lexicon.from_path(
             args.path,
             language=args.language,
             locale=args.locale,
         )
-    else:
-        # Dictionary inspection requires Lexhint's rich artifact. Dataset acquisition
-        # deliberately remains Lexhint's responsibility.
-        lexicon = Lexicon(
-            args.language or "en",
-            variant="rich",
-            dataset_version=args.dataset_version,
-            locale=args.locale,
-        )
-    return lexicon.entries(
-        args.word,
-        all_case_variants=getattr(args, "all_case_variants", False),
+    return Lexicon(
+        args.language or "en",
+        variant="rich",
+        dataset_version=args.dataset_version,
+        locale=args.locale,
+    )
+
+
+def _open_backend(
+    args: argparse.Namespace,
+    *,
+    include_pos: tuple[str, ...] = (),
+    exclude_pos: tuple[str, ...] = (),
+) -> LexhintBackend:
+    return LexhintBackend(
+        _open_lexicon(args),
+        all_case_variants=args.all_case_variants,
+        include_pos=include_pos,
+        exclude_pos=exclude_pos,
     )
 
 
@@ -133,11 +141,25 @@ def main(argv: Sequence[str] | None = None) -> int:
     err = _console(no_color=args.no_color, width=args.width, stderr=True)
 
     try:
-        raw_entries = _lookup(args)
         include = parse_pos_list(args.pos)
         exclude = parse_pos_list(args.exclude_pos)
-        entries = filter_entries(raw_entries, include=include, exclude=exclude)
         use_tui = _use_tui(args)
+        if args.word is None and not use_tui:
+            raise ValueError("a word is required outside an interactive terminal")
+        backend = _open_backend(args, include_pos=include, exclude_pos=exclude)
+        if args.word is None:
+            from .tui import run_viewer
+
+            run_viewer(
+                backend,
+                word=None,
+                entries=(),
+                width=args.width,
+                no_color=args.no_color,
+                open_lookup_on_mount=True,
+            )
+            return 0
+        entries = backend.entries(args.word)
     except (
         LexiconCapabilityError,
         LexiconCoverageError,
@@ -150,7 +172,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         error = Text("error: ", style="bold red")
         error.append(str(exc))
         err.print(error)
-        if args.path is None:
+        if args.path is None and args.word is not None:
             hint = Text("hint: ", style="dim")
             hint.append("install a rich dictionary dataset with ")
             hint.append(
@@ -162,7 +184,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if not entries:
         empty_message = None
-        if raw_entries and (args.pos or args.exclude_pos):
+        if args.pos or args.exclude_pos:
             selected = args.pos or ""
             excluded = args.exclude_pos or ""
             if selected and excluded:
@@ -174,12 +196,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             empty_message = f"No {label} entry found for {args.word!r}."
         render_entries(out, args.word, entries, empty_message=empty_message)
         return 1
+
     if use_tui:
         from .tui import run_viewer
 
         run_viewer(
-            args.word,
-            entries,
+            backend,
+            word=args.word,
+            entries=entries,
             width=args.width,
             no_color=args.no_color,
         )
