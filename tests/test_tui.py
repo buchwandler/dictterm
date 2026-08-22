@@ -127,6 +127,7 @@ def test_line_scroll_keys_move_repeatedly_at_mobile_size() -> None:
             for _ in range(30):
                 await pilot.press("down")
             assert 1 < scroll.scroll_y <= scroll.max_scroll_y
+            assert scroll.vertical_scrollbar.position == scroll.scroll_y
 
             await pilot.press("home")
             assert scroll.scroll_y == 0

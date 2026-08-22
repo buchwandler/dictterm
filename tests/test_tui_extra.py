@@ -4,7 +4,6 @@ import asyncio
 import os
 
 from lexhint import DictionaryEntry, Sense
-from textual import events
 from textual.widgets import Footer
 
 from dictterm.tui import DictionaryViewerApp, EntryScroll, _temporary_no_color
@@ -116,59 +115,6 @@ def test_scrolling_remains_available_when_footer_has_focus() -> None:
             assert scroll.scroll_y == 0
             await pilot.press("end")
             assert scroll.scroll_y == scroll.max_scroll_y
-
-    asyncio.run(scenario())
-
-
-def test_pointer_scrolling_is_independent_of_swipe_start_position() -> None:
-    long_text = " ".join(["A long definition."] * 240)
-    entries = (DictionaryEntry("love", "noun", (Sense(glosses=(long_text,)),)),)
-
-    async def scenario() -> None:
-        app = DictionaryViewerApp("love", entries)
-        async with app.run_test(size=(40, 10)) as pilot:
-            scroll = app.query_one("#entry-scroll", EntryScroll)
-            targets = (
-                app.query_one("#entry-nav"),
-                scroll,
-                app.query_one(Footer),
-            )
-
-            for target in targets:
-                scroll.scroll_home(animate=False, immediate=True)
-                await app.on_event(
-                    events.MouseScrollDown(
-                        target,
-                        target.region.x + 1,
-                        target.region.y,
-                        0,
-                        1,
-                        0,
-                        False,
-                        False,
-                        False,
-                    )
-                )
-                await pilot.pause()
-                assert scroll.scroll_y > 0
-
-            for target in targets:
-                scroll.scroll_end(animate=False, immediate=True)
-                await app.on_event(
-                    events.MouseScrollUp(
-                        target,
-                        target.region.x + 1,
-                        target.region.y,
-                        0,
-                        -1,
-                        0,
-                        False,
-                        False,
-                        False,
-                    )
-                )
-                await pilot.pause()
-                assert scroll.scroll_y < scroll.max_scroll_y
 
     asyncio.run(scenario())
 

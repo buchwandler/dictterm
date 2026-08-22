@@ -331,6 +331,7 @@ class EntryScroll(VerticalScroll):
     can_focus = True
 
     def watch_scroll_y(self, old_value: float, new_value: float) -> None:
+        super().watch_scroll_y(old_value, new_value)
         if self.app.is_mounted:
             self.app.call_after_refresh(self.app._sync_active_index)
 
@@ -385,21 +386,6 @@ class DictionaryViewerApp(App[None]):
         if isinstance(self.screen, (LookupScreen, HelpScreen)) and action in _VIEWER_ACTIONS:
             return False
         return super().check_action(action, parameters)
-
-    async def on_event(self, event: events.Event) -> None:
-        """Route Termux swipe events to the viewer's sole scrollable pane."""
-        if isinstance(event, (events.MouseScrollDown, events.MouseScrollUp)) and not isinstance(
-            self.screen, (LookupScreen, HelpScreen)
-        ):
-            direction = 1 if isinstance(event, events.MouseScrollDown) else -1
-            self._entry_scroll().scroll_relative(
-                y=direction * self.scroll_sensitivity_y,
-                animate=False,
-                immediate=True,
-            )
-            event.stop()
-            return
-        await super().on_event(event)
 
     def _reindex_entries(self) -> None:
         pos_to_indices: defaultdict[str, list[int]] = defaultdict(list)
