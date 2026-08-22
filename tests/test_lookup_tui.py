@@ -20,7 +20,7 @@ def _entry(word: str, pos: str = "noun", long: bool = False) -> DictionaryEntry:
 class FakeBackend:
     def __init__(self) -> None:
         self.lookup_calls: list[str] = []
-        self.suggest_calls: list[str] = []
+        self.complete_calls: list[str] = []
         self._entries = {
             "love": (_entry("love"),),
             "lover": (_entry("lover", "verb"),),
@@ -28,7 +28,7 @@ class FakeBackend:
             "loving": (_entry("loving"),),
             "long": (_entry("long", long=True),),
         }
-        self._suggestions = {
+        self._completions = {
             "lov": ("love", "lover", "lovely"),
             "love": ("love", "lover"),
             "lover": ("lover", "lovely"),
@@ -39,9 +39,9 @@ class FakeBackend:
         self.lookup_calls.append(word)
         return self._entries.get(word, ())
 
-    def suggest(self, query: str, *, limit: int = 20) -> tuple[str, ...]:
-        self.suggest_calls.append(query)
-        return self._suggestions.get(query, ())[:limit]
+    def complete(self, prefix: str, *, limit: int = 20) -> tuple[str, ...]:
+        self.complete_calls.append(prefix)
+        return self._completions.get(prefix, ())[:limit]
 
 
 async def _open_lookup(pilot) -> LookupScreen:
@@ -76,7 +76,7 @@ def test_lookup_modal_focuses_input_and_filters_viewer_bindings() -> None:
     asyncio.run(scenario())
 
 
-def test_live_suggestions_navigation_and_enter_replace_result() -> None:
+def test_live_completions_navigation_and_enter_replace_result() -> None:
     async def scenario() -> None:
         backend = FakeBackend()
         app = DictionaryViewerApp(backend, (_entry("love"),), word="love")

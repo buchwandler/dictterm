@@ -238,27 +238,27 @@ class LookupScreen(ModalScreen[str | None]):
             self._refresh_timer.stop()
         self._refresh_timer = self.set_timer(
             0.1,
-            lambda: self._refresh_suggestions(query, generation),
+            lambda: self._refresh_completions(query, generation),
         )
 
-    def _refresh_suggestions(self, query: str, generation: int) -> None:
+    def _refresh_completions(self, query: str, generation: int) -> None:
         current_query = self.query_one("#lookup-input", Input).value.strip()
         if generation != self._generation or query != current_query:
             return
         try:
-            suggestions = tuple(self.backend.suggest(query, limit=20))
+            completions = tuple(self.backend.complete(query, limit=20))
         except Exception as exc:
             self.query_one("#lookup-options", OptionList).clear_options()
             self._set_status(f"Lookup error: {exc}", error=True)
             return
         options = self.query_one("#lookup-options", OptionList)
         options.clear_options()
-        if suggestions:
-            options.add_options(Option(word, id=word) for word in suggestions)
+        if completions:
+            options.add_options(Option(word, id=word) for word in completions)
             options.highlighted = 0
             self._set_status("up/down choose   Enter open   Esc cancel")
         else:
-            self._set_status(f'No suggestions. Press Enter to try an exact lookup for "{query}".')
+            self._set_status(f'No completions. Press Enter to try an exact lookup for "{query}".')
 
     def _selected_word(self) -> str | None:
         options = self.query_one("#lookup-options", OptionList)
@@ -344,7 +344,7 @@ class _StaticBackend:
     def entries(self, word: str) -> tuple[DictionaryEntry, ...]:
         return self._entries if word == self.word else ()
 
-    def suggest(self, query: str, *, limit: int = 20) -> tuple[str, ...]:
+    def complete(self, prefix: str, *, limit: int = 20) -> tuple[str, ...]:
         return ()
 
 

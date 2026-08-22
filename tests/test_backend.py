@@ -16,14 +16,14 @@ def _entry(word: str, pos: str) -> DictionaryEntry:
 class FakeLexicon:
     def __init__(self) -> None:
         self.entry_calls: list[tuple[str, bool]] = []
-        self.suggest_calls: list[tuple[str, int]] = []
+        self.complete_calls: list[tuple[str, int]] = []
 
     def entries(self, word: str, *, all_case_variants: bool = False):
         self.entry_calls.append((word, all_case_variants))
         return (_entry(word, "noun"), _entry(word, "verb"))
 
-    def suggest(self, query: str, *, limit: int = 20):
-        self.suggest_calls.append((query, limit))
+    def complete(self, prefix: str, *, limit: int = 20):
+        self.complete_calls.append((prefix, limit))
         return ("love", "lover")
 
 
@@ -40,9 +40,15 @@ def test_backend_filters_entries_and_forwards_case_policy() -> None:
     assert lexicon.entry_calls == [("love", True)]
 
 
-def test_backend_forwards_bounded_suggestions() -> None:
+def test_backend_forwards_bounded_completions() -> None:
     lexicon = FakeLexicon()
     backend = LexhintBackend(lexicon)
 
-    assert backend.suggest("lov", limit=7) == ("love", "lover")
-    assert lexicon.suggest_calls == [("lov", 7)]
+    assert backend.complete("lov", limit=7) == ("love", "lover")
+    assert lexicon.complete_calls == [("lov", 7)]
+
+
+def test_supported_lexhint_has_completion_api() -> None:
+    from lexhint import Lexicon
+
+    assert callable(getattr(Lexicon, "complete", None))

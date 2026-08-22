@@ -172,7 +172,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         error = Text("error: ", style="bold red")
         error.append(str(exc))
         err.print(error)
-        if args.path is None and args.word is not None:
+        if args.path is None and isinstance(
+            exc,
+            (LexiconNotInstalled, LexiconCapabilityError),
+        ):
             hint = Text("hint: ", style="dim")
             hint.append("install a rich dictionary dataset with ")
             hint.append(

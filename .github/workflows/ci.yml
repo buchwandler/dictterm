@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install development dependencies
+        run: python -m pip install -e ".[dev]"
+      - name: Run tests
+        run: python -m pytest -q
+      - name: Check Ruff lint
+        run: python -m ruff check .
+      - name: Check Ruff formatting
+        run: python -m ruff format --check .
+
+  package:
+    name: Build and validate distributions
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+      - name: Install build tools
+        run: python -m pip install -e ".[dev]"
+      - name: Build distributions
+        run: python -m build
+      - name: Validate distributions
+        run: python -m twine check dist/*
+      - name: Upload distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: distributions
+          path: dist/
+          if-no-files-found: error
+
+  wheel-smoke:
+    name: Smoke-test installed wheel
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: distributions
+          path: dist/
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: Install wheel in a fresh virtual environment
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install dist/dictterm-*.whl
+      - name: Check installed CLI
+        run: |
+          .venv/bin/dictterm --version
+          .venv/bin/dictterm --help
+          .venv/bin/python -m dictterm --version
+      - name: Install a real rich dataset
+        run: .venv/bin/lexhint dataset download en --variant rich
+      - name: Run a real dictionary lookup
+        run: .venv/bin/dictterm love --plain --no-color

@@ -10,7 +10,7 @@ from .selection import filter_entries
 class DictionaryBackend(Protocol):
     def entries(self, word: str) -> tuple[DictionaryEntry, ...]: ...
 
-    def suggest(self, query: str, *, limit: int = 20) -> tuple[str, ...]: ...
+    def complete(self, prefix: str, *, limit: int = 20) -> tuple[str, ...]: ...
 
 
 class LexhintBackend:
@@ -36,5 +36,5 @@ class LexhintBackend:
         )
         return filter_entries(raw, include=self.include_pos, exclude=self.exclude_pos)
 
-    def suggest(self, query: str, *, limit: int = 20) -> tuple[str, ...]:
-        return tuple(self.lexicon.suggest(query, limit=limit))
+    def complete(self, prefix: str, *, limit: int = 20) -> tuple[str, ...]:
+        return tuple(self.lexicon.complete(prefix, limit=limit))

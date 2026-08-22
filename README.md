@@ -11,14 +11,14 @@ leaving the user at the end of terminal scrollback.
 ## Requirements
 
 - Python 3.10+
-- `lexhint>=0.1.0`
+- `lexhint>=0.1.3`
 - `rich>=14.2`
 - `textual>=8.2.8,<9`
 - a Lexhint **rich** dataset for the language you want to query
 
 ## Install
 
-Once both projects are available from PyPI:
+Install dictterm and its Lexhint dependency from PyPI:
 
 ```bash
 python -m pip install dictterm
@@ -26,7 +26,7 @@ lexhint dataset download en --variant rich
 dictterm lavish
 ```
 
-During development, while Lexhint is installed from a checkout:
+For development, while Lexhint is installed from a checkout:
 
 ```bash
 python -m pip install -e ../lexhint
@@ -93,6 +93,12 @@ mutate datasets. If the rich artifact is missing, the CLI points the user to:
 lexhint dataset download en --variant rich
 ```
 
+## Exit status
+
+- `0`: lookup succeeded
+- `1`: no dictionary entry matched, or POS filtering removed every entry
+- `2`: invalid invocation, dataset, or runtime error
+
 ## Versioning
 
 The package version is dynamic and comes from Git tags via `setuptools-scm`.
@@ -115,8 +121,10 @@ dictterm/
 ├── dictterm/
 │   ├── __init__.py
 │   ├── __main__.py
+│   ├── backend.py
 │   ├── cli.py
 │   ├── render.py
+│   ├── selection.py
 │   ├── tui.py
 │   └── py.typed
 ├── tests/

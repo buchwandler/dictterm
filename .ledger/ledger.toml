@@ -2,7 +2,7 @@ schema_version = 3
 
 [project]
 uuid = "e3121382-192f-46ff-b863-03ca073d381d"
-name = "dictshow"
+name = "dictterm"
 
 [ledgers.taskledger.mounts.data]
 storage = "external"

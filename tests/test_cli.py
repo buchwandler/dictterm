@@ -4,7 +4,13 @@ import argparse
 from pathlib import Path
 
 import pytest
-from lexhint import DictionaryEntry, LexiconNotInstalled, Sense
+from lexhint import (
+    DictionaryEntry,
+    LexiconCapabilityError,
+    LexiconCoverageError,
+    LexiconNotInstalled,
+    Sense,
+)
 
 from dictterm import cli
 
@@ -169,3 +175,54 @@ def test_missing_managed_dataset_hint_uses_resolved_language(monkeypatch, capsys
     monkeypatch.setattr(cli, "Lexicon", MissingLexicon)
     assert cli.main(["word"]) == 2
     assert "lexhint dataset download en --variant rich" in capsys.readouterr().err
+
+
+def test_bare_tui_missing_dataset_prints_install_hint(monkeypatch, capsys) -> None:
+    class TTY:
+        def isatty(self) -> bool:
+            return True
+
+    class MissingLexicon:
+        def __init__(self, *args, **kwargs):
+            raise LexiconNotInstalled("no local artifact")
+
+    monkeypatch.setattr(cli.sys, "stdin", TTY())
+    monkeypatch.setattr(cli.sys, "stdout", TTY())
+    monkeypatch.setattr(cli, "Lexicon", MissingLexicon)
+
+    assert cli.main([]) == 2
+    assert "lexhint dataset download en --variant rich" in capsys.readouterr().err
+
+
+def test_managed_capability_error_prints_install_hint(monkeypatch, capsys) -> None:
+    class MissingCapabilityLexicon:
+        def __init__(self, *args, **kwargs):
+            raise LexiconCapabilityError("rich capability missing")
+
+    monkeypatch.setattr(cli, "Lexicon", MissingCapabilityLexicon)
+
+    assert cli.main(["word"]) == 2
+    assert "lexhint dataset download en --variant rich" in capsys.readouterr().err
+
+
+def test_unrelated_managed_error_does_not_print_install_hint(monkeypatch, capsys) -> None:
+    class BrokenLexicon:
+        def __init__(self, *args, **kwargs):
+            raise LexiconCoverageError("incomplete artifact")
+
+    monkeypatch.setattr(cli, "Lexicon", BrokenLexicon)
+
+    assert cli.main(["word"]) == 2
+    assert "dataset download" not in capsys.readouterr().err
+
+
+def test_custom_dataset_error_does_not_print_install_hint(monkeypatch, capsys) -> None:
+    class MissingCustomLexicon:
+        @classmethod
+        def from_path(cls, path, **kwargs):
+            raise LexiconNotInstalled("custom artifact missing")
+
+    monkeypatch.setattr(cli, "Lexicon", MissingCustomLexicon)
+
+    assert cli.main(["word", "--path", "custom.sqlite3"]) == 2
+    assert "dataset download" not in capsys.readouterr().err
