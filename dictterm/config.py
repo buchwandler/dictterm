@@ -54,6 +54,31 @@ class AppConfig:
 
 
 @dataclass(frozen=True)
+class SettingsOverrides:
+    """Explicit command-line values used to resolve effective settings."""
+
+    language: str | None = None
+    locale: str | None = None
+    all_case_variants: bool | None = None
+    width: int | None = None
+    no_color: bool | None = None
+    plain: bool | None = None
+    tui: bool | None = None
+
+    @classmethod
+    def from_namespace(cls, args: argparse.Namespace) -> SettingsOverrides:
+        return cls(
+            language=getattr(args, "language", None),
+            locale=getattr(args, "locale", None),
+            all_case_variants=getattr(args, "all_case_variants", None),
+            width=getattr(args, "width", None),
+            no_color=getattr(args, "no_color", None),
+            plain=getattr(args, "plain", None),
+            tui=getattr(args, "tui", None),
+        )
+
+
+@dataclass(frozen=True)
 class EffectiveSettings:
     language: str
     locale: str | None
@@ -125,8 +150,7 @@ def _require_table(data: dict[str, object], name: str, path: Path) -> dict[str, 
 def _validate_keys(table: dict[str, object], name: str, path: Path) -> None:
     unknown = sorted(set(table) - _TABLE_KEYS[name])
     if unknown:
-        key = unknown[0]
-        raise _fail(path, f"unknown key [{name}].{key}")
+        raise _fail(path, f"unknown key [{name}].{unknown[0]}")
 
 
 def _string(value: object, label: str, path: Path, *, allow_none: bool = False) -> str | None:
@@ -302,29 +326,30 @@ def _env_overrides(config: AppConfig) -> tuple[DictionaryConfig, DisplayConfig, 
     return dictionary, display, tts
 
 
-def resolve_settings(args: argparse.Namespace, config: AppConfig) -> EffectiveSettings:
+def resolve_settings(
+    overrides: SettingsOverrides | argparse.Namespace, config: AppConfig
+) -> EffectiveSettings:
+    if isinstance(overrides, argparse.Namespace):
+        overrides = SettingsOverrides.from_namespace(overrides)
     dictionary, display, tts = _env_overrides(config)
 
-    def explicit(name: str, current: object) -> object:
-        value = getattr(args, name, None)
+    def explicit(value: object, current: object) -> object:
         return current if value is None else value
 
     dictionary = DictionaryConfig(
-        explicit("language", dictionary.language),
-        explicit("locale", dictionary.locale),
-        explicit("all_case_variants", dictionary.all_case_variants),
+        explicit(overrides.language, dictionary.language),
+        explicit(overrides.locale, dictionary.locale),
+        explicit(overrides.all_case_variants, dictionary.all_case_variants),
     )
     mode = display.mode
-    if getattr(args, "plain", False):
+    if overrides.plain:
         mode = "plain"
-    elif getattr(args, "tui", False):
+    elif overrides.tui:
         mode = "tui"
-    else:
-        mode = explicit("mode", mode)
     display = DisplayConfig(
         mode,
-        explicit("width", display.width),
-        explicit("no_color", display.no_color),
+        explicit(overrides.width, display.width),
+        explicit(overrides.no_color, display.no_color),
     )
     return EffectiveSettings(
         language=dictionary.language,

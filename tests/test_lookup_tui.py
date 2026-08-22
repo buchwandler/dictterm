@@ -220,6 +220,10 @@ def test_bare_cli_launches_lookup_in_tty(monkeypatch) -> None:
     assert cli.main([]) == 0
     assert calls[0]["kwargs"]["open_lookup_on_mount"] is True
     assert calls[0]["kwargs"]["word"] is None
+    calls.clear()
+    assert cli.main(["lookup"]) == 0
+    assert calls[0]["kwargs"]["open_lookup_on_mount"] is True
+    assert calls[0]["kwargs"]["word"] is None
 
 
 def test_bare_plain_cli_fails_without_opening_dataset(monkeypatch, capsys) -> None:

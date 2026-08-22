@@ -45,33 +45,33 @@ dictterm lavish
 ## Usage
 
 ```text
-dictterm [WORD] [-l LANGUAGE] [--locale LOCALE]
-              [--dataset-version VERSION] [--path FILE]
-              [--all-case-variants] [--pos POS[,POS...]]
-              [--exclude-pos POS[,POS...]] [--width COLUMNS]
-              [--no-color] [--plain | --tui]
-              [--config PATH] [--config-path] [--init-config]
-              [--tts-check]
+dictterm [WORD] [lookup options]
+dictterm lookup [WORD] [lookup options]
+dictterm config path|init|show [options]
+dictterm tts check [options]
 ```
 
-Examples:
+The normal dictionary action stays short. These forms are equivalent lookup entry points:
 
 ```bash
-dictterm                          # lookup mode in an interactive terminal
+dictterm                          # interactive lookup mode in a terminal
 dictterm lavish                    # open a word in the viewer
+dictterm lookup lavish             # explicit lookup form
+dictterm lookup config             # look up a reserved command word
 dictterm love -l en
 dictterm Haus -l de
 dictterm color --locale en-US
 dictterm love --pos noun,verb
-dictterm love --all-case-variants
-dictterm compiler --dataset-version 2026.08.20
 dictterm compiler --path ./lexhint-en.sqlite3
-dictterm love --plain         # one-shot output
-dictterm love --plain | less -R
-dictterm --init-config
-dictterm --config-path
-dictterm --tts-check
+dictterm love --plain              # one-shot output
+dictterm --plain love              # shorthand options may precede WORD
 ```
+
+At argv position 1, `lookup`, `config`, and `tts` are reserved command families. Use
+`dictterm lookup WORD` when the word itself is reserved. `dictterm` and `dictterm lookup`
+open interactive lookup mode in a terminal. Outside a terminal, a word is required and
+the command uses plain output. `--tui` forces the viewer and requires terminal input/output.
+
 
 In a terminal, bare `dictterm` opens interactive lookup mode. Type a word to see live candidate
 headwords, use Up/Down to choose one, and press Enter to open it. `dictterm WORD` opens that word
@@ -108,13 +108,20 @@ lexhint dataset download en --variant rich
 
 ## Configuration and TTS
 
-The optional configuration file is resolved at `$XDG_CONFIG_HOME/dictterm/config.toml`, or at `~/.config/dictterm/config.toml` when `XDG_CONFIG_HOME` is unset. Create a commented starter file with:
+The optional configuration file is resolved at `$XDG_CONFIG_HOME/dictterm/config.toml`, or at
+`~/.config/dictterm/config.toml` when `XDG_CONFIG_HOME` is unset. Manage it with:
 
 ```bash
-dictterm --init-config
+dictterm config path
+dictterm config init
+dictterm config show
+dictterm config show --config ./test.toml
 ```
 
-Configuration values are applied in this order: built-in defaults, TOML, `DICTTERM_*` environment variables, then explicit CLI options. Use `--config PATH` to select a file, and `--config-path` to print the resolved path. Unknown keys and invalid values are rejected.
+`config init` creates a commented starter file and refuses to overwrite an existing file.
+`config show` displays effective settings after built-in defaults, TOML, `DICTTERM_*`
+environment variables, and explicit command-line overrides. Unknown keys and invalid values are rejected.
+The `--config PATH` option selects an alternate configuration source for lookup, config, and TTS commands.
 
 Enable direct in-memory PyKokoro playback in the `[tts]` table:
 
@@ -126,7 +133,10 @@ language = "en-us"
 speed = 1.0
 ```
 
-Then run `dictterm --tts-check` and open a word in the TUI. Read controls appear only when TTS is enabled. Speech uses PyKokoro's `AudioResult.play()` directly; no external player, subprocess, temporary WAV, or generated-audio cache is used. `--plain` remains deterministic and never adds speech controls.
+Then run `dictterm tts check` and open a word in the TUI. Read controls appear only when TTS is
+enabled. Speech uses PyKokoro's `AudioResult.play()` directly; no external player, subprocess,
+temporary WAV, or generated-audio cache is used. `--plain` remains deterministic and never adds
+speech controls.
 
 ## Exit status
 
@@ -157,8 +167,13 @@ dictterm/
 │   ├── __init__.py
 │   ├── __main__.py
 │   ├── backend.py
-│   ├── config.py
 │   ├── cli.py
+│   ├── cli_options.py
+│   ├── commands/
+│   │   ├── config.py
+│   │   ├── lookup.py
+│   │   └── tts.py
+│   ├── config.py
 │   ├── render.py
 │   ├── selection.py
 │   ├── speech.py

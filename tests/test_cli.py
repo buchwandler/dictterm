@@ -228,22 +228,74 @@ def test_custom_dataset_error_does_not_print_install_hint(monkeypatch, capsys) -
     assert "dataset download" not in capsys.readouterr().err
 
 
+def test_shorthand_and_explicit_lookup_are_equivalent(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(cli, "Lexicon", FakeLexicon)
+    assert cli.main(["love", "--plain"]) == 0
+    shorthand = capsys.readouterr().out
+    assert cli.main(["lookup", "love", "--plain"]) == 0
+    assert capsys.readouterr().out == shorthand
+
+
+def test_reserved_words_use_explicit_lookup(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(cli, "Lexicon", FakeLexicon)
+    assert cli.main(["lookup", "config", "--plain"]) == 0
+    assert "A noun definition." in capsys.readouterr().out
+
+
 def test_config_path_prints_override(tmp_path: Path, capsys) -> None:
     path = tmp_path / "config.toml"
-    assert cli.main(["--config", str(path), "--config-path"]) == 0
+    assert cli.main(["config", "path", "--config", str(path)]) == 0
     assert capsys.readouterr().out.strip() == str(path)
 
 
 def test_init_config_reports_path_and_refuses_overwrite(tmp_path: Path, capsys) -> None:
     path = tmp_path / "config.toml"
-    assert cli.main(["--config", str(path), "--init-config"]) == 0
+    assert cli.main(["config", "init", "--config", str(path)]) == 0
     assert capsys.readouterr().out.strip() == str(path)
-    assert cli.main(["--config", str(path), "--init-config"]) == 2
+    assert cli.main(["config", "init", "--config", str(path)]) == 2
     assert "already exists" in capsys.readouterr().err
+
+
+def test_config_show_reports_effective_settings(monkeypatch, tmp_path: Path, capsys) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text('[dictionary]\nlanguage = "de"\n[display]\nwidth = 60\n')
+    monkeypatch.setenv("DICTTERM_LANGUAGE", "fr")
+    assert cli.main(["config", "show", "--config", str(path), "--language", "it"]) == 0
+    output = capsys.readouterr().out
+    assert f"config          {path}" in output
+    assert "language        it" in output
+    assert "width           60" in output
+
+
+def test_tts_check_command_is_lazy_when_disabled(tmp_path: Path, capsys) -> None:
+    path = tmp_path / "config.toml"
+    assert cli.main(["tts", "check", "--config", str(path)]) == 0
+    assert "enabled         no" in capsys.readouterr().out
+
+
+def test_command_help_does_not_expose_lookup_options(capsys) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["config", "--help"])
+    assert exc_info.value.code == 0
+    output = capsys.readouterr().out
+    assert "config" in output
+    assert "--pos" not in output
+    assert "--all-case-variants" not in output
+
+
+def test_root_help_documents_hybrid_grammar(capsys) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["--help"])
+    assert exc_info.value.code == 0
+    output = capsys.readouterr().out
+    assert "lookup" in output
+    assert "config" in output
+    assert "tts" in output
+    assert "dictterm WORD" in output
 
 
 def test_invalid_config_is_controlled_error(tmp_path: Path, capsys) -> None:
     path = tmp_path / "config.toml"
     path.write_text("[tts]\nspeed = 0\n")
-    assert cli.main(["--config", str(path), "word"]) == 2
+    assert cli.main(["lookup", "word", "--config", str(path)]) == 2
     assert "greater than 0" in capsys.readouterr().err
