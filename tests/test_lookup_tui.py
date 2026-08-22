@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 
 from lexhint import DictionaryEntry, Sense
-from textual.widgets import Input, OptionList
+from textual.widgets import Footer, Input, OptionList
 
 from dictterm.tui import DictionaryEntryView, DictionaryViewerApp, LookupScreen
 
@@ -98,6 +98,32 @@ def test_live_suggestions_navigation_and_enter_replace_result() -> None:
     asyncio.run(scenario())
 
 
+
+def test_lookup_navigation_isolated_from_background_scroll() -> None:
+    async def scenario() -> None:
+        backend = FakeBackend()
+        app = DictionaryViewerApp(backend, (_entry("love", long=True),), word="love")
+        async with app.run_test(size=(60, 12)) as pilot:
+            scroll = app.query_one("#entry-scroll")
+            await pilot.press("pagedown")
+            before = scroll.scroll_y
+            screen = await _open_lookup(pilot)
+            await _replace_input(screen, pilot, "lov")
+            options = screen.query_one("#lookup-options", OptionList)
+            assert options.highlighted == 0
+
+            await pilot.press("down")
+            assert options.highlighted == 1
+            await pilot.press("pagedown")
+            assert options.highlighted == 2
+            await pilot.press("pageup")
+            assert options.highlighted == 0
+            await pilot.press("up")
+            assert options.highlighted == 2
+            assert scroll.scroll_y == before
+
+    asyncio.run(scenario())
+
 def test_escape_preserves_current_result_and_missing_exact_reopens_lookup() -> None:
     async def scenario() -> None:
         backend = FakeBackend()
@@ -152,13 +178,19 @@ def test_post_lookup_long_result_can_scroll() -> None:
             await pilot.press("enter")
             await pilot.pause()
             scroll = app.query_one("#entry-scroll")
+            footer = app.query_one(Footer)
+            app.screen.set_focus(footer)
             await pilot.press("down")
             assert app.word == "long"
             assert scroll.scroll_y > 0
+            before = scroll.scroll_y
+            await pilot.press("j")
+            assert scroll.scroll_y > before
+            before = scroll.scroll_y
+            await pilot.press("pagedown")
+            assert scroll.scroll_y > before
             await pilot.press("home")
             assert scroll.scroll_y == 0
-            await pilot.press("j")
-            assert scroll.scroll_y > 0
             await pilot.press("end")
             assert scroll.scroll_y == scroll.max_scroll_y
             assert len(app.query(DictionaryEntryView)) == 1

@@ -92,14 +92,19 @@ def test_viewer_bindings_are_priority_binding_objects() -> None:
     assert all(binding.priority for binding in VIEWER_BINDINGS)
 
 
-def test_native_scroll_keys_are_not_priority_app_bindings() -> None:
-    app_keys = {binding.key for binding in VIEWER_BINDINGS if binding.priority}
-    assert app_keys.isdisjoint({"up", "down", "pageup", "pagedown", "home", "end"})
-
-
-def test_entry_scroll_has_vim_and_page_aliases() -> None:
-    alias_keys = {binding.key for binding in EntryScroll.BINDINGS}
-    assert {"j", "k", "space", "b", "g", "G"} <= alias_keys
+def test_viewer_scroll_bindings_are_priority_and_focus_independent() -> None:
+    bindings = {binding.action: binding for binding in VIEWER_BINDINGS}
+    expected = {
+        "scroll_line_up": "up,k",
+        "scroll_line_down": "down,j",
+        "scroll_page_up": "pageup,b",
+        "scroll_page_down": "pagedown,space",
+        "scroll_document_home": "home,g",
+        "scroll_document_end": "end,G",
+    }
+    assert {action: bindings[action].key for action in expected} == expected
+    assert all(bindings[action].priority for action in expected)
+    assert not any(binding.action in expected for binding in EntryScroll.BINDINGS)
 
 
 def test_line_scroll_keys_move_repeatedly_at_mobile_size() -> None:

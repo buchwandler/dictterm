@@ -29,6 +29,12 @@ NAV_DIM_STYLE = Style(dim=True)
 
 VIEWER_BINDINGS = [
     Binding("q", "quit", "Quit", priority=True),
+    Binding("up,k", "scroll_line_up", "", show=False, priority=True),
+    Binding("down,j", "scroll_line_down", "", show=False, priority=True),
+    Binding("pageup,b", "scroll_page_up", "", show=False, priority=True),
+    Binding("pagedown,space", "scroll_page_down", "", show=False, priority=True),
+    Binding("home,g", "scroll_document_home", "", show=False, priority=True),
+    Binding("end,G", "scroll_document_end", "", show=False, priority=True),
     Binding("[", "previous_entry", "Previous", priority=True),
     Binding("]", "next_entry", "Next", priority=True),
     Binding("n", "jump_noun", "Noun", priority=True),
@@ -317,16 +323,11 @@ class LookupScreen(ModalScreen[str | None]):
             self.dismiss(None)
 
 
-class EntryScroll(VerticalScroll):
-    BINDINGS = [
-        Binding("j", "scroll_down", "", show=False),
-        Binding("k", "scroll_up", "", show=False),
-        Binding("space", "page_down", "", show=False),
-        Binding("b", "page_up", "", show=False),
-        Binding("g", "scroll_home", "", show=False),
-        Binding("G", "scroll_end", "", show=False),
-    ]
+class ViewerFooter(Footer):
+    can_focus = True
 
+
+class EntryScroll(VerticalScroll):
     def watch_scroll_y(self, old_value: float, new_value: float) -> None:
         if self.app.is_mounted:
             self.app.call_after_refresh(self.app._sync_active_index)
@@ -374,6 +375,7 @@ class DictionaryViewerApp(App[None]):
         self._active_index = 0
         self._entry_offsets: tuple[float, ...] = ()
         self._entry_heights: tuple[int, ...] = ()
+        self._programmatic_scroll_y: float | None = None
         self._pos_to_indices: dict[str, tuple[int, ...]] = {}
         self._reindex_entries()
 
@@ -388,12 +390,33 @@ class DictionaryViewerApp(App[None]):
             pos_to_indices[normalize_pos(entry.pos)].append(index)
         self._pos_to_indices = {pos: tuple(indices) for pos, indices in pos_to_indices.items()}
 
+    def _entry_scroll(self) -> EntryScroll:
+        return self.query_one("#entry-scroll", EntryScroll)
+
+    def action_scroll_line_down(self) -> None:
+        self._entry_scroll().scroll_down(animate=False, immediate=True)
+
+    def action_scroll_line_up(self) -> None:
+        self._entry_scroll().scroll_up(animate=False, immediate=True)
+
+    def action_scroll_page_down(self) -> None:
+        self._entry_scroll().scroll_page_down(animate=False)
+
+    def action_scroll_page_up(self) -> None:
+        self._entry_scroll().scroll_page_up(animate=False)
+
+    def action_scroll_document_home(self) -> None:
+        self._entry_scroll().scroll_home(animate=False, immediate=True)
+
+    def action_scroll_document_end(self) -> None:
+        self._entry_scroll().scroll_end(animate=False, immediate=True)
+
     def compose(self) -> ComposeResult:
         yield Static(self._navigation_text(), id="entry-nav", markup=False)
         with EntryScroll(id="entry-scroll"):
             for index, entry in enumerate(self.entries):
                 yield DictionaryEntryView(entry, index)
-        yield Footer()
+        yield ViewerFooter()
 
     def on_mount(self) -> None:
         scroll = self.query_one("#entry-scroll", EntryScroll)
@@ -436,15 +459,21 @@ class DictionaryViewerApp(App[None]):
             self._capture_entry_geometry(scroll)
         if len(self._entry_offsets) == len(self.entries):
             scroll_top = scroll.scroll_y
-            visible = [
-                index
-                for index, (offset, height) in enumerate(
-                    zip(self._entry_offsets, self._entry_heights, strict=True)
-                )
-                if offset + height > scroll_top
-            ]
-            if visible:
-                return min(visible, key=lambda index: abs(self._entry_offsets[index] - scroll_top))
+            if scroll_top >= scroll.max_scroll_y:
+                viewport_bottom = scroll_top + scroll.region.height
+                visible_at_bottom = [
+                    index
+                    for index, offset in enumerate(self._entry_offsets)
+                    if offset < viewport_bottom
+                ]
+                if visible_at_bottom:
+                    return max(visible_at_bottom)
+            for index, (offset, height) in enumerate(
+                zip(self._entry_offsets, self._entry_heights, strict=True)
+            ):
+                if scroll_top < offset + height:
+                    return index
+            return len(self._entry_offsets) - 1
         viewport_top = scroll.region.y
         views = list(self.query(DictionaryEntryView))
         visible = [view for view in views if view.region.bottom > viewport_top]
@@ -464,6 +493,12 @@ class DictionaryViewerApp(App[None]):
     def _sync_active_index(self) -> None:
         if not self.entries:
             return
+        scroll = self.query_one("#entry-scroll", EntryScroll)
+        if self._programmatic_scroll_y is not None:
+            if scroll.scroll_y == self._programmatic_scroll_y:
+                self._programmatic_scroll_y = None
+                return
+            self._programmatic_scroll_y = None
         index = self._current_entry_index()
         if index != self._active_index:
             self._active_index = index
@@ -475,6 +510,7 @@ class DictionaryViewerApp(App[None]):
         target = self.query_one(f"#entry-{index}", DictionaryEntryView)
         scroll = self.query_one("#entry-scroll", EntryScroll)
         scroll.scroll_to_widget(target, animate=False, top=True, immediate=True)
+        self._programmatic_scroll_y = scroll.scroll_y
         self._active_index = index
         self._update_navigation()
 
