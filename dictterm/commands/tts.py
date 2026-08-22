@@ -45,9 +45,8 @@ def run(args: argparse.Namespace, out: Console, err: Console) -> int:
 
     from ..speech import (
         PyKokoroSpeechService,
-        SpeechPlaybackError,
+        SpeechError,
         SpeechRequest,
-        SpeechSynthesisError,
         SpeechUnavailable,
     )
 
@@ -69,16 +68,12 @@ def run(args: argparse.Namespace, out: Console, err: Console) -> int:
         service.speak(
             SpeechRequest("tts-check", "dictterm TTS check", config.language, "headword", 0)
         )
-        out.print("synthesis       ok")
-        out.print("playback        ok")
+        out.print("streaming       ok")
     except SpeechUnavailable as exc:
         out.print("pykokoro        unavailable")
         err.print(f"error: {exc}")
         return 2
-    except SpeechSynthesisError as exc:
-        err.print(f"error: {exc}")
-        return 2
-    except SpeechPlaybackError as exc:
+    except SpeechError as exc:
         err.print(f"error: {exc}")
         return 2
     finally:

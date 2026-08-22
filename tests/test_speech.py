@@ -5,9 +5,8 @@ import pytest
 from dictterm.config import TTSConfig
 from dictterm.speech import (
     PyKokoroSpeechService,
-    SpeechPlaybackError,
+    SpeechError,
     SpeechRequest,
-    SpeechSynthesisError,
     SpeechUnavailable,
 )
 
@@ -22,33 +21,28 @@ class FakePipelineConfig:
         self.kwargs = kwargs
 
 
-class FakeResult:
-    def __init__(self, *, fail_play: bool = False) -> None:
-        self.fail_play = fail_play
-        self.play_calls = 0
-
-    def play(self) -> None:
-        self.play_calls += 1
-        if self.fail_play:
-            raise RuntimeError("speaker failed")
-
-
 class FakePipeline:
     created: list[FakePipeline] = []
-    run_calls: list[str] = []
-    fail_run = False
-    fail_play = False
+    stream_calls: list[dict[str, object]] = []
+    stream_error: Exception | None = None
 
     def __init__(self, config: FakePipelineConfig) -> None:
         self.config = config
         self.closed = False
         type(self).created.append(self)
 
-    def run(self, text: str) -> FakeResult:
-        type(self).run_calls.append(text)
-        if self.fail_run:
-            raise RuntimeError("model failed")
-        return FakeResult(fail_play=self.fail_play)
+    def play_streaming(
+        self,
+        text: str,
+        *,
+        unit: str = "sentence",
+        queue_size: int = 2,
+    ) -> None:
+        type(self).stream_calls.append(
+            {"text": text, "unit": unit, "queue_size": queue_size}
+        )
+        if self.stream_error is not None:
+            raise self.stream_error
 
     def close(self) -> None:
         self.closed = True
@@ -57,9 +51,8 @@ class FakePipeline:
 @pytest.fixture(autouse=True)
 def reset_fakes() -> None:
     FakePipeline.created.clear()
-    FakePipeline.run_calls.clear()
-    FakePipeline.fail_run = False
-    FakePipeline.fail_play = False
+    FakePipeline.stream_calls.clear()
+    FakePipeline.stream_error = None
 
 
 def request(text: str = "defer") -> SpeechRequest:
@@ -83,14 +76,17 @@ def test_disabled_service_does_not_load_pykokoro(monkeypatch) -> None:
     PyKokoroSpeechService(TTSConfig()).speak(request())
 
 
-def test_pipeline_is_lazy_reused_and_directly_played(monkeypatch) -> None:
+def test_pipeline_is_lazy_reused_and_streamed(monkeypatch) -> None:
     install_fake(monkeypatch)
     service = PyKokoroSpeechService(TTSConfig(enabled=True, voice="af_voice", speed=1.25))
     assert not FakePipeline.created
     service.speak(request("first"))
     service.speak(request("second"))
     assert len(FakePipeline.created) == 1
-    assert FakePipeline.run_calls == ["first", "second"]
+    assert FakePipeline.stream_calls == [
+        {"text": "first", "unit": "sentence", "queue_size": 2},
+        {"text": "second", "unit": "sentence", "queue_size": 2},
+    ]
     config = FakePipeline.created[0].config.kwargs
     assert config["voice"] == "af_voice"
     assert config["generation"].kwargs == {"lang": "en-us", "speed": 1.25}
@@ -111,7 +107,7 @@ def test_optional_pipeline_settings_only_forward_when_set(monkeypatch) -> None:
     assert "model_variant" not in kwargs
 
 
-def test_import_synthesis_and_playback_failures_are_typed(monkeypatch) -> None:
+def test_import_failure_stays_unavailable(monkeypatch) -> None:
     from dictterm import speech
 
     monkeypatch.setattr(
@@ -120,16 +116,19 @@ def test_import_synthesis_and_playback_failures_are_typed(monkeypatch) -> None:
     with pytest.raises(SpeechUnavailable):
         PyKokoroSpeechService(TTSConfig(enabled=True)).speak(request())
 
+
+def test_playback_extra_failure_has_install_hint(monkeypatch) -> None:
     install_fake(monkeypatch)
-    FakePipeline.fail_run = True
-    with pytest.raises(SpeechSynthesisError):
+    FakePipeline.stream_error = ImportError("No module named sounddevice")
+    with pytest.raises(SpeechUnavailable, match=r'dictterm\[tts\]'):
         PyKokoroSpeechService(TTSConfig(enabled=True)).speak(request())
 
-    FakePipeline.fail_run = False
-    FakePipeline.fail_play = True
-    with pytest.raises(SpeechPlaybackError):
-        PyKokoroSpeechService(TTSConfig(enabled=True)).speak(request())
 
+def test_streaming_failure_is_generic_speech_error(monkeypatch) -> None:
+    install_fake(monkeypatch)
+    FakePipeline.stream_error = RuntimeError("stream failed")
+    with pytest.raises(SpeechError, match="TTS streaming failed"):
+        PyKokoroSpeechService(TTSConfig(enabled=True)).speak(request())
 
 def test_structured_speech_text_omits_visual_metadata() -> None:
     from lexhint import DictionaryEntry, Example, Form, Sense

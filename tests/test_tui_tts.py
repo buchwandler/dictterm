@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
 from lexhint import DictionaryEntry, Example, Form, Pronunciation, Sense
 
 from dictterm.config import TTSConfig
@@ -75,12 +76,14 @@ def test_enabled_tts_controls_target_structured_text(monkeypatch) -> None:
 
 _LONG_DEFINITION = (
     "A definition with enough prose to wrap across many narrow terminal lines while "
-    "remaining fully present in the Textual content widget."
+    "remaining fully present in the Textual content widget, final-Z."
 )
 _LONG_EXAMPLE_ONE = (
-    "The first example contains enough prose to wrap before the play control gutter."
+    "The first example contains enough prose to wrap before the play control gutter, final-Q."
 )
-_LONG_EXAMPLE_TWO = "The second example also contains enough prose to wrap across several lines."
+_LONG_EXAMPLE_TWO = (
+    "The second example also contains enough prose to wrap across several lines, final-X."
+)
 
 
 def _long_entry() -> DictionaryEntry:
@@ -99,24 +102,29 @@ def _long_entry() -> DictionaryEntry:
     )
 
 
-def test_tts_read_controls_never_overlap_text_at_mobile_width() -> None:
+@pytest.mark.parametrize("width", (40, 41, 42, 50))
+def test_tts_read_controls_reserve_gutter_at_wrap_boundaries(width: int) -> None:
     async def scenario() -> None:
         app = DictionaryViewerApp(
             "compiler",
             (_long_entry(),),
             tts_config=TTSConfig(enabled=True),
         )
-        async with app.run_test(size=(40, 12)) as pilot:
+        async with app.run_test(size=(width, 12)) as pilot:
+            await pilot.pause()
+            controls = list(app.query(ReadControl))
+            assert controls
+            app.screen.set_focus(controls[-1])
             await pilot.pause()
             scroll = app.query_one("#entry-scroll", EntryScroll)
             rendered_rows = []
             for row in app.query(".semantic-row"):
-                controls = list(row.query(ReadControl))
-                if not controls:
+                row_controls = list(row.query(ReadControl))
+                if not row_controls:
                     continue
                 content = row.query_one(".semantic-row-content")
-                control = controls[0]
-                assert content.region.right <= control.region.x
+                control = row_controls[0]
+                assert content.region.right + 1 <= control.region.x
                 assert control.region.right <= row.region.right
                 assert row.region.right <= scroll.region.right
                 assert control.region.width == 3
@@ -126,6 +134,9 @@ def test_tts_read_controls_never_overlap_text_at_mobile_width() -> None:
             assert _LONG_DEFINITION in rendered
             assert _LONG_EXAMPLE_ONE in rendered
             assert _LONG_EXAMPLE_TWO in rendered
+            assert "final-Z" in rendered
+            assert "final-Q" in rendered
+            assert "final-X" in rendered
             assert scroll.max_scroll_x == 0
 
     asyncio.run(scenario())

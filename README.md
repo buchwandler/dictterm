@@ -134,9 +134,10 @@ speed = 1.0
 ```
 
 Then run `dictterm tts check` and open a word in the TUI. Read controls appear only when TTS is
-enabled. Speech uses PyKokoro's `AudioResult.play()` directly; no external player, subprocess,
-temporary WAV, or generated-audio cache is used. `--plain` remains deterministic and never adds
-speech controls.
+enabled. Speech uses PyKokoro's in-memory sentence streaming: the first generated sentence starts
+playing while later sentence audio is generated, using one output stream for each read request. No
+external player, subprocess, temporary WAV, or complete generated-audio cache is used. `--plain`
+remains deterministic and never adds speech controls.
 
 ## Exit status
 

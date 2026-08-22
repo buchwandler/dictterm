@@ -145,6 +145,7 @@ Screen {
     min-width: 3;
     max-width: 3;
     height: 1;
+    margin-left: 1;
     padding: 0;
     content-align: center middle;
 }

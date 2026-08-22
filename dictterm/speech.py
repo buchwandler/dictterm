@@ -118,13 +118,18 @@ class PyKokoroSpeechService:
             return
         pipeline = self._get_pipeline()
         try:
-            result = pipeline.run(request.text)
+            pipeline.play_streaming(
+                request.text,
+                unit="sentence",
+                queue_size=2,
+            )
+        except ImportError as exc:
+            raise SpeechUnavailable(
+                "PyKokoro playback is not installed. Install dictterm with: "
+                'pip install "dictterm[tts]"'
+            ) from exc
         except Exception as exc:
-            raise SpeechSynthesisError(f"TTS synthesis failed: {exc}") from exc
-        try:
-            result.play()
-        except Exception as exc:
-            raise SpeechPlaybackError(f"Audio playback failed: {exc}") from exc
+            raise SpeechError(f"TTS streaming failed: {exc}") from exc
 
     def close(self) -> None:
         if self._pipeline is None:
