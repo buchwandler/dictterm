@@ -4,6 +4,7 @@ import asyncio
 import os
 
 from lexhint import DictionaryEntry, Sense
+from textual import events
 from textual.widgets import Footer
 
 from dictterm.tui import DictionaryViewerApp, EntryScroll, _temporary_no_color
@@ -85,7 +86,6 @@ def test_native_home_end_and_page_keys() -> None:
     asyncio.run(scenario())
 
 
-
 def test_scrolling_remains_available_when_footer_has_focus() -> None:
     long_text = " ".join(["A long definition."] * 240)
     entries = (DictionaryEntry("love", "noun", (Sense(glosses=(long_text,)),)),)
@@ -116,6 +116,59 @@ def test_scrolling_remains_available_when_footer_has_focus() -> None:
             assert scroll.scroll_y == 0
             await pilot.press("end")
             assert scroll.scroll_y == scroll.max_scroll_y
+
+    asyncio.run(scenario())
+
+
+def test_pointer_scrolling_is_independent_of_swipe_start_position() -> None:
+    long_text = " ".join(["A long definition."] * 240)
+    entries = (DictionaryEntry("love", "noun", (Sense(glosses=(long_text,)),)),)
+
+    async def scenario() -> None:
+        app = DictionaryViewerApp("love", entries)
+        async with app.run_test(size=(40, 10)) as pilot:
+            scroll = app.query_one("#entry-scroll", EntryScroll)
+            targets = (
+                app.query_one("#entry-nav"),
+                scroll,
+                app.query_one(Footer),
+            )
+
+            for target in targets:
+                scroll.scroll_home(animate=False, immediate=True)
+                await app.on_event(
+                    events.MouseScrollDown(
+                        target,
+                        target.region.x + 1,
+                        target.region.y,
+                        0,
+                        1,
+                        0,
+                        False,
+                        False,
+                        False,
+                    )
+                )
+                await pilot.pause()
+                assert scroll.scroll_y > 0
+
+            for target in targets:
+                scroll.scroll_end(animate=False, immediate=True)
+                await app.on_event(
+                    events.MouseScrollUp(
+                        target,
+                        target.region.x + 1,
+                        target.region.y,
+                        0,
+                        -1,
+                        0,
+                        False,
+                        False,
+                        False,
+                    )
+                )
+                await pilot.pause()
+                assert scroll.scroll_y < scroll.max_scroll_y
 
     asyncio.run(scenario())
 
@@ -153,6 +206,7 @@ def test_line_scroll_stays_within_first_entry_before_boundary() -> None:
 
     asyncio.run(scenario())
 
+
 def test_manual_scrolling_updates_header_active_entry() -> None:
     long_text = " ".join(["A long definition."] * 120)
     entries = (
@@ -189,8 +243,18 @@ def test_help_overlay_isolates_background_scrolling() -> None:
             assert "PageUp / PageDown" in help_content.render().plain
 
             scroll_keys = (
-                "up", "down", "pageup", "pagedown", "home", "end",
-                "j", "k", "space", "b", "g", "G",
+                "up",
+                "down",
+                "pageup",
+                "pagedown",
+                "home",
+                "end",
+                "j",
+                "k",
+                "space",
+                "b",
+                "g",
+                "G",
             )
             for key in scroll_keys:
                 await pilot.press(key)
