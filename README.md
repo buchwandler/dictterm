@@ -74,7 +74,9 @@ Viewer keys:
 | ----------------------- | --------------------------------- |
 | Arrow keys, mouse wheel | Scroll                            |
 | Page Up / Page Down     | Page scroll                       |
+| Space / `b`             | Page down / up                    |
 | Home / End              | Document start / end              |
+| `g` / `G`               | Document start / end aliases      |
 | `j` / `k`               | Scroll down / up                  |
 | `[` / `]`               | Previous / next dictionary entry  |
 | `n` / `v`               | Cycle noun / verb entries         |

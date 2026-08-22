@@ -92,8 +92,18 @@ def test_viewer_bindings_are_priority_binding_objects() -> None:
     assert all(binding.priority for binding in VIEWER_BINDINGS)
 
 
-def test_line_scroll_keys_move_immediately_at_mobile_size() -> None:
-    long_text = " ".join(["A long definition."] * 150)
+def test_native_scroll_keys_are_not_priority_app_bindings() -> None:
+    app_keys = {binding.key for binding in VIEWER_BINDINGS if binding.priority}
+    assert app_keys.isdisjoint({"up", "down", "pageup", "pagedown", "home", "end"})
+
+
+def test_entry_scroll_has_vim_and_page_aliases() -> None:
+    alias_keys = {binding.key for binding in EntryScroll.BINDINGS}
+    assert {"j", "k", "space", "b", "g", "G"} <= alias_keys
+
+
+def test_line_scroll_keys_move_repeatedly_at_mobile_size() -> None:
+    long_text = " ".join(["A long definition."] * 300)
     entries = (
         DictionaryEntry(
             word="love",
@@ -106,44 +116,24 @@ def test_line_scroll_keys_move_immediately_at_mobile_size() -> None:
         app = DictionaryViewerApp("love", entries)
         async with app.run_test(size=(40, 10)) as pilot:
             scroll = app.query_one("#entry-scroll", EntryScroll)
+            assert app.screen.focused is scroll
             assert scroll.max_scroll_y > 0
 
-            before = scroll.scroll_y
-            await pilot.press("j")
-            assert scroll.scroll_y == min(before + 1, scroll.max_scroll_y)
+            for _ in range(30):
+                await pilot.press("down")
+            assert 1 < scroll.scroll_y <= scroll.max_scroll_y
 
-            before = scroll.scroll_y
-            await pilot.press("down")
-            assert scroll.scroll_y == min(before + 1, scroll.max_scroll_y)
+            await pilot.press("home")
+            assert scroll.scroll_y == 0
+            for _ in range(30):
+                await pilot.press("j")
+            assert 1 < scroll.scroll_y <= scroll.max_scroll_y
 
-            await pilot.press("k")
-            assert scroll.scroll_y == max(0, before)
-
-
-def test_down_binding_routes_through_viewer_action() -> None:
-    class TrackingViewer(DictionaryViewerApp):
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
-            self.down_action_calls = 0
-
-        def action_scroll_down(self) -> None:
-            self.down_action_calls += 1
-            super().action_scroll_down()
-
-    long_text = " ".join(["A long definition."] * 150)
-    entries = (
-        DictionaryEntry(
-            word="love",
-            pos="noun",
-            senses=(Sense(glosses=(long_text,)),),
-        ),
-    )
-
-    async def scenario() -> None:
-        app = TrackingViewer("love", entries)
-        async with app.run_test(size=(40, 10)) as pilot:
-            await pilot.press("down")
-            assert app.down_action_calls == 1
+            await pilot.press("end")
+            assert scroll.scroll_y == scroll.max_scroll_y
+            for _ in range(30):
+                await pilot.press("k")
+            assert 0 <= scroll.scroll_y < scroll.max_scroll_y
 
     asyncio.run(scenario())
 

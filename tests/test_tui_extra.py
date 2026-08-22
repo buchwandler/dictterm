@@ -60,12 +60,26 @@ def test_native_home_end_and_page_keys() -> None:
             scroll = app.query_one("#entry-scroll")
             await pilot.press("pagedown")
             assert scroll.scroll_y > 0
+            page_position = scroll.scroll_y
+            await pilot.press("space")
+            assert scroll.scroll_y >= page_position
+            await pilot.press("pageup")
+            assert scroll.scroll_y < scroll.max_scroll_y
+            await pilot.press("b")
+            assert scroll.scroll_y >= 0
+
             await pilot.press("home")
             assert scroll.scroll_y == 0
+            await pilot.press("g")
+            assert scroll.scroll_y == 0
             await pilot.press("end")
+            assert scroll.scroll_y == scroll.max_scroll_y
+            await pilot.press("G")
+            assert scroll.scroll_y == scroll.max_scroll_y
+            await pilot.press("k")
+            assert scroll.scroll_y < scroll.max_scroll_y
+            await pilot.press("j")
             assert scroll.scroll_y > 0
-            await pilot.press("up")
-            await pilot.press("down")
 
     asyncio.run(scenario())
 

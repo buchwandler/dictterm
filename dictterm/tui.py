@@ -29,18 +29,6 @@ NAV_DIM_STYLE = Style(dim=True)
 
 VIEWER_BINDINGS = [
     Binding("q", "quit", "Quit", priority=True),
-    Binding("up", "scroll_up", "Up", priority=True),
-    Binding("down", "scroll_down", "Down", priority=True),
-    Binding("j", "scroll_down", "Down", priority=True),
-    Binding("k", "scroll_up", "Up", priority=True),
-    Binding("pageup", "page_up", "Page Up", priority=True),
-    Binding("pagedown", "page_down", "Page Down", priority=True),
-    Binding("space", "page_down", "Page Down", priority=True),
-    Binding("b", "page_up", "Page Up", priority=True),
-    Binding("home", "scroll_home", "Top", priority=True),
-    Binding("end", "scroll_end", "Bottom", priority=True),
-    Binding("g", "scroll_home", "Top", priority=True),
-    Binding("G", "scroll_end", "Bottom", priority=True),
     Binding("[", "previous_entry", "Previous", priority=True),
     Binding("]", "next_entry", "Next", priority=True),
     Binding("n", "jump_noun", "Noun", priority=True),
@@ -67,7 +55,7 @@ HELP_GROUPS = (
         "Navigation",
         (
             ("up / down / j / k", "scroll"),
-            ("PageUp / PageDown", "page"),
+            ("PageUp / PageDown / Space / b", "page"),
             ("Home / End / g / G", "top / bottom"),
             ("[ / ]", "previous / next entry"),
             ("n / v / a / r", "cycle noun / verb / adjective / adverb"),
@@ -330,6 +318,15 @@ class LookupScreen(ModalScreen[str | None]):
 
 
 class EntryScroll(VerticalScroll):
+    BINDINGS = [
+        Binding("j", "scroll_down", "", show=False),
+        Binding("k", "scroll_up", "", show=False),
+        Binding("space", "page_down", "", show=False),
+        Binding("b", "page_up", "", show=False),
+        Binding("g", "scroll_home", "", show=False),
+        Binding("G", "scroll_end", "", show=False),
+    ]
+
     def watch_scroll_y(self, old_value: float, new_value: float) -> None:
         if self.app.is_mounted:
             self.app.call_after_refresh(self.app._sync_active_index)
@@ -543,44 +540,6 @@ class DictionaryViewerApp(App[None]):
             LookupScreen(self.backend, seed=self.word or ""),
             self._on_lookup_selected,
         )
-
-    def _entry_scroll(self) -> EntryScroll:
-        return self.query_one("#entry-scroll", EntryScroll)
-
-    def _sync_after_scroll(self) -> None:
-        self.call_after_refresh(self._sync_active_index)
-
-    def action_scroll_down(self) -> None:
-        scroll = self._entry_scroll()
-        scroll.scroll_relative(y=1, animate=False, immediate=True)
-        self._sync_after_scroll()
-
-    def action_scroll_up(self) -> None:
-        scroll = self._entry_scroll()
-        scroll.scroll_relative(y=-1, animate=False, immediate=True)
-        self._sync_after_scroll()
-
-    def action_page_down(self) -> None:
-        scroll = self._entry_scroll()
-        amount = max(1, scroll.scrollable_content_region.height)
-        scroll.scroll_relative(y=amount, animate=False, immediate=True)
-        self._sync_after_scroll()
-
-    def action_page_up(self) -> None:
-        scroll = self._entry_scroll()
-        amount = max(1, scroll.scrollable_content_region.height)
-        scroll.scroll_relative(y=-amount, animate=False, immediate=True)
-        self._sync_after_scroll()
-
-    def action_scroll_home(self) -> None:
-        scroll = self._entry_scroll()
-        scroll.scroll_home(animate=False, immediate=True)
-        self._sync_after_scroll()
-
-    def action_scroll_end(self) -> None:
-        scroll = self._entry_scroll()
-        scroll.scroll_end(animate=False, immediate=True)
-        self._sync_after_scroll()
 
     def action_previous_entry(self) -> None:
         self._jump_to_entry(self._active_index - 1)

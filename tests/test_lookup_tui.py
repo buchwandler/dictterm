@@ -152,13 +152,15 @@ def test_post_lookup_long_result_can_scroll() -> None:
             await pilot.press("enter")
             await pilot.pause()
             scroll = app.query_one("#entry-scroll")
-            await pilot.press("end")
+            await pilot.press("down")
             assert app.word == "long"
             assert scroll.scroll_y > 0
             await pilot.press("home")
             assert scroll.scroll_y == 0
             await pilot.press("j")
             assert scroll.scroll_y > 0
+            await pilot.press("end")
+            assert scroll.scroll_y == scroll.max_scroll_y
             assert len(app.query(DictionaryEntryView)) == 1
 
     asyncio.run(scenario())
