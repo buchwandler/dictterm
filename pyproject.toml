@@ -35,7 +35,7 @@ dependencies = [
 
 [project.optional-dependencies]
 tts = [
-  "pykokoro[cpu,sounddevice]>=0.8.3,<0.9",
+  "pykokoro[cpu,sounddevice]>=0.8.6,<0.9",
 ]
 dev = [
   "build>=1",

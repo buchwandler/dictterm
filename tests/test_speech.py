@@ -38,9 +38,7 @@ class FakePipeline:
         unit: str = "sentence",
         queue_size: int = 2,
     ) -> None:
-        type(self).stream_calls.append(
-            {"text": text, "unit": unit, "queue_size": queue_size}
-        )
+        type(self).stream_calls.append({"text": text, "unit": unit, "queue_size": queue_size})
         if self.stream_error is not None:
             raise self.stream_error
 
@@ -120,7 +118,7 @@ def test_import_failure_stays_unavailable(monkeypatch) -> None:
 def test_playback_extra_failure_has_install_hint(monkeypatch) -> None:
     install_fake(monkeypatch)
     FakePipeline.stream_error = ImportError("No module named sounddevice")
-    with pytest.raises(SpeechUnavailable, match=r'dictterm\[tts\]'):
+    with pytest.raises(SpeechUnavailable, match=r"dictterm\[tts\]"):
         PyKokoroSpeechService(TTSConfig(enabled=True)).speak(request())
 
 
@@ -129,6 +127,7 @@ def test_streaming_failure_is_generic_speech_error(monkeypatch) -> None:
     FakePipeline.stream_error = RuntimeError("stream failed")
     with pytest.raises(SpeechError, match="TTS streaming failed"):
         PyKokoroSpeechService(TTSConfig(enabled=True)).speak(request())
+
 
 def test_structured_speech_text_omits_visual_metadata() -> None:
     from lexhint import DictionaryEntry, Example, Form, Sense

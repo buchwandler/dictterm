@@ -72,7 +72,6 @@ At argv position 1, `lookup`, `config`, and `tts` are reserved command families.
 open interactive lookup mode in a terminal. Outside a terminal, a word is required and
 the command uses plain output. `--tui` forces the viewer and requires terminal input/output.
 
-
 In a terminal, bare `dictterm` opens interactive lookup mode. Type a word to see live candidate
 headwords, use Up/Down to choose one, and press Enter to open it. `dictterm WORD` opens that word
 directly in the viewer. Use `--plain` for deterministic one-shot Rich output; a word is required
