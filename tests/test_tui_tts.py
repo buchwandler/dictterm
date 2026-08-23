@@ -111,8 +111,25 @@ def test_semantic_rows_without_tts_keep_full_content_width() -> None:
             assert rows
             for row in rows:
                 content = row.query_one(".semantic-row-content")
-                assert not content.has_class("semantic-row-content-with-control")
                 assert content.content_region.right == content.region.right
+
+    asyncio.run(scenario())
+
+
+def test_example_text_avoids_terminal_dependent_italic_clipping() -> None:
+    async def scenario() -> None:
+        app = DictionaryViewerApp("compiler", (_long_entry(),))
+        async with app.run_test(size=(40, 12)) as pilot:
+            await pilot.pause()
+            examples = [
+                content.render()
+                for content in app.query(".semantic-row-content")
+                if content.render().plain.startswith("“")
+            ]
+            assert examples
+            assert all(
+                "italic" not in str(span.style) for example in examples for span in example.spans
+            )
 
     asyncio.run(scenario())
 
@@ -139,12 +156,7 @@ def test_tts_read_controls_reserve_gutter_at_wrap_boundaries(width: int) -> None
                     continue
                 content = row.query_one(".semantic-row-content")
                 control = row_controls[0]
-                assert content.has_class("semantic-row-content-with-control")
-                # The safety column must be inside the content widget, not outside
-                # it, so glyph overhang cannot be clipped at the content boundary.
-                assert content.region.right - content.content_region.right >= 1
-                assert content.content_region.right + 1 <= control.region.x
-                assert content.region.right <= control.region.x
+                assert content.region.right + 1 <= control.region.x
                 assert control.region.right <= row.region.right
                 assert row.region.right <= scroll.region.right
                 assert control.region.width == 3
