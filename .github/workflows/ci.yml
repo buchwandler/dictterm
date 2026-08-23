@@ -80,7 +80,7 @@ jobs:
           .venv/bin/dictterm --version
           .venv/bin/dictterm --help
           .venv/bin/python -m dictterm --version
-      - name: Install a real rich dataset
-        run: .venv/bin/lexhint dataset download en --variant rich
+      - name: Install a real dictionary dataset
+        run: .venv/bin/lexhint dataset download en --variant dictionary
       - name: Run a real dictionary lookup
         run: .venv/bin/dictterm love --plain --no-color

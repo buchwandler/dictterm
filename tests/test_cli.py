@@ -24,6 +24,7 @@ def _entry(word: str, pos: str) -> DictionaryEntry:
 
 
 class FakeLexicon:
+    capabilities = ("lexical", "semantic", "dictionary")
     created: list[tuple[str, dict[str, object]]] = []
     path_created: list[tuple[object, dict[str, object]]] = []
     results: tuple[DictionaryEntry, ...] = (_entry("word", "noun"),)
@@ -54,13 +55,32 @@ def reset_fake() -> None:
     FakeLexicon.results = (_entry("word", "noun"),)
 
 
-def test_cli_lookup_uses_managed_english_rich_dataset(monkeypatch, capsys) -> None:
+def test_cli_lookup_uses_managed_english_dictionary_dataset(monkeypatch, capsys) -> None:
     monkeypatch.setattr(cli, "Lexicon", FakeLexicon)
     assert cli.main(["word", "--no-color"]) == 0
     assert "A noun definition." in capsys.readouterr().out
     assert FakeLexicon.created == [
-        ("en", {"variant": "rich", "dataset_version": None, "locale": None})
+        ("en", {"variant": "dictionary", "dataset_version": None, "locale": None})
     ]
+
+
+def test_explicit_rich_variant_is_forwarded(monkeypatch) -> None:
+    monkeypatch.setattr(cli, "Lexicon", FakeLexicon)
+    assert cli.main(["word", "--variant", "rich", "--plain"]) == 0
+    assert FakeLexicon.created[0][1]["variant"] == "rich"
+
+
+def test_variant_and_dataset_version_are_forwarded(monkeypatch) -> None:
+    monkeypatch.setattr(cli, "Lexicon", FakeLexicon)
+    assert (
+        cli.main(["word", "--variant", "dictionary", "--dataset-version", "2026.08.20", "--plain"])
+        == 0
+    )
+    assert FakeLexicon.created[0][1] == {
+        "variant": "dictionary",
+        "dataset_version": "2026.08.20",
+        "locale": None,
+    }
 
 
 def test_explicit_language_and_locale_are_forwarded(monkeypatch) -> None:
@@ -68,7 +88,7 @@ def test_explicit_language_and_locale_are_forwarded(monkeypatch) -> None:
     assert cli.main(["word", "-l", "de", "--locale", "de-DE", "--plain"]) == 0
     assert FakeLexicon.created[0] == (
         "de",
-        {"variant": "rich", "dataset_version": None, "locale": "de-DE"},
+        {"variant": "dictionary", "dataset_version": None, "locale": "de-DE"},
     )
 
 
@@ -86,6 +106,14 @@ def test_path_with_language_is_forwarded_for_validation(monkeypatch) -> None:
     assert FakeLexicon.path_created == [
         (Path("lexicon.sqlite3"), {"language": "de", "locale": None})
     ]
+
+
+def test_path_and_variant_is_controlled_error(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(cli, "Lexicon", FakeLexicon)
+    assert cli.main(["word", "--path", "x.sqlite3", "--variant", "rich"]) == 2
+    error = capsys.readouterr().err
+    assert "--path cannot be combined with --variant" in error
+    assert "dataset download" not in error
 
 
 def test_path_and_dataset_version_is_controlled_error(monkeypatch, capsys) -> None:
@@ -161,6 +189,12 @@ def test_forced_tui_on_non_tty_is_controlled_error(monkeypatch, capsys) -> None:
     assert "--tui requires an interactive terminal" in capsys.readouterr().err
 
 
+def test_invalid_managed_variant_is_rejected() -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["word", "--variant", "runtime"])
+    assert exc_info.value.code == 2
+
+
 def test_width_below_minimum_is_rejected() -> None:
     with pytest.raises(SystemExit) as exc_info:
         cli.main(["word", "--width", "39"])
@@ -174,7 +208,7 @@ def test_missing_managed_dataset_hint_uses_resolved_language(monkeypatch, capsys
 
     monkeypatch.setattr(cli, "Lexicon", MissingLexicon)
     assert cli.main(["word"]) == 2
-    assert "lexhint dataset download en --variant rich" in capsys.readouterr().err
+    assert "lexhint dataset download en --variant dictionary" in capsys.readouterr().err
 
 
 def test_bare_tui_missing_dataset_prints_install_hint(monkeypatch, capsys) -> None:
@@ -191,7 +225,7 @@ def test_bare_tui_missing_dataset_prints_install_hint(monkeypatch, capsys) -> No
     monkeypatch.setattr(cli, "Lexicon", MissingLexicon)
 
     assert cli.main([]) == 2
-    assert "lexhint dataset download en --variant rich" in capsys.readouterr().err
+    assert "lexhint dataset download en --variant dictionary" in capsys.readouterr().err
 
 
 def test_managed_capability_error_prints_install_hint(monkeypatch, capsys) -> None:
@@ -202,7 +236,30 @@ def test_managed_capability_error_prints_install_hint(monkeypatch, capsys) -> No
     monkeypatch.setattr(cli, "Lexicon", MissingCapabilityLexicon)
 
     assert cli.main(["word"]) == 2
+    assert "lexhint dataset download en --variant dictionary" in capsys.readouterr().err
+
+
+def test_explicit_rich_missing_dataset_hint(monkeypatch, capsys) -> None:
+    class MissingLexicon:
+        def __init__(self, *args, **kwargs):
+            raise LexiconNotInstalled("no local artifact")
+
+    monkeypatch.setattr(cli, "Lexicon", MissingLexicon)
+    assert cli.main(["word", "--variant", "rich"]) == 2
     assert "lexhint dataset download en --variant rich" in capsys.readouterr().err
+
+
+def test_pinned_dataset_missing_hint_preserves_version(monkeypatch, capsys) -> None:
+    class MissingLexicon:
+        def __init__(self, *args, **kwargs):
+            raise LexiconNotInstalled("no local artifact")
+
+    monkeypatch.setattr(cli, "Lexicon", MissingLexicon)
+    assert cli.main(["word", "--variant", "dictionary", "--dataset-version", "2026.08.20"]) == 2
+    assert (
+        "lexhint dataset download en --variant dictionary --version 2026.08.20"
+        in capsys.readouterr().err
+    )
 
 
 def test_unrelated_managed_error_does_not_print_install_hint(monkeypatch, capsys) -> None:
@@ -226,6 +283,17 @@ def test_custom_dataset_error_does_not_print_install_hint(monkeypatch, capsys) -
 
     assert cli.main(["word", "--path", "custom.sqlite3"]) == 2
     assert "dataset download" not in capsys.readouterr().err
+
+
+def test_custom_runtime_artifact_is_rejected_before_lookup(monkeypatch, capsys) -> None:
+    class RuntimeArtifact(FakeLexicon):
+        capabilities = ("lexical", "semantic")
+
+    monkeypatch.setattr(cli, "Lexicon", RuntimeArtifact)
+    assert cli.main(["word", "--path", "runtime.sqlite3"]) == 2
+    error = capsys.readouterr().err
+    assert "required by dictterm: dictionary" in error
+    assert "dataset download" not in error
 
 
 def test_shorthand_and_explicit_lookup_are_equivalent(monkeypatch, capsys) -> None:
@@ -264,6 +332,7 @@ def test_config_show_reports_effective_settings(monkeypatch, tmp_path: Path, cap
     output = capsys.readouterr().out
     assert f"config          {path}" in output
     assert "language        it" in output
+    assert "variant         dictionary" in output
     assert "width           60" in output
 
 

@@ -4,11 +4,14 @@ import argparse
 from dataclasses import dataclass
 from pathlib import Path
 
+from .dataset_policy import DEFAULT_VARIANT, MANAGED_VARIANTS
+
 
 @dataclass(frozen=True)
 class DictionarySourceOptions:
     language: str | None = None
     locale: str | None = None
+    variant: str | None = None
     dataset_version: str | None = None
     path: Path | None = None
 
@@ -41,13 +44,19 @@ def add_dictionary_source_options(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument("--locale", default=None, help="locale preference passed to Lexhint")
     parser.add_argument(
+        "--variant",
+        choices=MANAGED_VARIANTS,
+        default=None,
+        help=f"select a managed Lexhint dictionary variant; default: {DEFAULT_VARIANT}",
+    )
+    parser.add_argument(
         "--dataset-version",
         help="select an exact installed lexhint dataset release",
     )
     parser.add_argument(
         "--path",
         type=Path,
-        help="open a specific lexhint SQLite artifact instead of the managed rich dataset",
+        help="open a specific lexhint SQLite artifact instead of a managed Lexhint dataset",
     )
 
 
@@ -95,6 +104,12 @@ def add_settings_override_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("-l", "--language", default=None, help="override dictionary language")
     parser.add_argument("--locale", default=None, help="override dictionary locale")
     parser.add_argument(
+        "--variant",
+        choices=MANAGED_VARIANTS,
+        default=None,
+        help=f"override managed Lexhint dictionary variant; default: {DEFAULT_VARIANT}",
+    )
+    parser.add_argument(
         "--all-case-variants",
         action="store_true",
         default=None,
@@ -113,6 +128,7 @@ def dictionary_source(args: argparse.Namespace) -> DictionarySourceOptions:
     return DictionarySourceOptions(
         language=args.language,
         locale=args.locale,
+        variant=args.variant,
         dataset_version=args.dataset_version,
         path=args.path,
     )

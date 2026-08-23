@@ -208,7 +208,14 @@ def test_bare_cli_launches_lookup_in_tty(monkeypatch) -> None:
     calls: list[dict[str, object]] = []
     monkeypatch.setattr(cli.sys, "stdin", TTY())
     monkeypatch.setattr(cli.sys, "stdout", TTY())
-    monkeypatch.setattr(cli, "Lexicon", lambda *args, **kwargs: object())
+
+    class FakeLexicon:
+        capabilities = ("lexical", "semantic", "dictionary")
+
+        def __init__(self, *args, **kwargs):
+            pass
+
+    monkeypatch.setattr(cli, "Lexicon", FakeLexicon)
 
     import dictterm.tui
 

@@ -11,6 +11,7 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - exercised on Python 3.10
     import tomli as tomllib
 
+from .dataset_policy import DEFAULT_VARIANT, MANAGED_VARIANTS, validate_managed_variant
 
 ConfigMode = Literal["auto", "tui", "plain"]
 
@@ -23,6 +24,7 @@ class ConfigError(ValueError):
 class DictionaryConfig:
     language: str = "en"
     locale: str | None = None
+    variant: str = DEFAULT_VARIANT
     all_case_variants: bool = False
 
 
@@ -59,6 +61,7 @@ class SettingsOverrides:
 
     language: str | None = None
     locale: str | None = None
+    variant: str | None = None
     all_case_variants: bool | None = None
     width: int | None = None
     no_color: bool | None = None
@@ -70,6 +73,7 @@ class SettingsOverrides:
         return cls(
             language=getattr(args, "language", None),
             locale=getattr(args, "locale", None),
+            variant=getattr(args, "variant", None),
             all_case_variants=getattr(args, "all_case_variants", None),
             width=getattr(args, "width", None),
             no_color=getattr(args, "no_color", None),
@@ -82,6 +86,7 @@ class SettingsOverrides:
 class EffectiveSettings:
     language: str
     locale: str | None
+    variant: str
     all_case_variants: bool
     mode: ConfigMode
     width: int | None
@@ -95,6 +100,7 @@ version = 1
 [dictionary]
 language = "en"
 # locale = "en-US"
+variant = "dictionary"   # dictionary | rich
 all_case_variants = false
 
 [display]
@@ -110,7 +116,7 @@ speed = 1.0
 """
 
 _TABLE_KEYS = {
-    "dictionary": {"language", "locale", "all_case_variants"},
+    "dictionary": {"language", "locale", "variant", "all_case_variants"},
     "display": {"mode", "width", "no_color"},
     "tts": {
         "enabled",
@@ -195,6 +201,12 @@ def _parse(data: dict[str, object], path: Path) -> AppConfig:
 
     language = _string(dictionary.get("language", "en"), "dictionary.language", path)
     locale = _string(dictionary.get("locale"), "dictionary.locale", path, allow_none=True)
+    variant_value = _string(dictionary.get("variant", DEFAULT_VARIANT), "dictionary.variant", path)
+    try:
+        variant = validate_managed_variant(variant_value or DEFAULT_VARIANT)
+    except ValueError as exc:
+        allowed = ", ".join(MANAGED_VARIANTS)
+        raise _fail(path, f"[dictionary].variant must be one of: {allowed}") from exc
     all_case_variants = _bool(
         dictionary.get("all_case_variants", False), "dictionary.all_case_variants", path
     )
@@ -224,7 +236,12 @@ def _parse(data: dict[str, object], path: Path) -> AppConfig:
 
     return AppConfig(
         version=version,
-        dictionary=DictionaryConfig(language or "en", locale, all_case_variants),
+        dictionary=DictionaryConfig(
+            language=language or "en",
+            locale=locale,
+            variant=variant,
+            all_case_variants=all_case_variants,
+        ),
         display=DisplayConfig(mode, width, no_color),
         tts=TTSConfig(enabled, voice or "af_heart", tts_language or "en-us", speed, **optional),
     )
@@ -281,32 +298,55 @@ def _env_overrides(config: AppConfig) -> tuple[DictionaryConfig, DisplayConfig, 
     tts = config.tts
     if "DICTTERM_LANGUAGE" in os.environ:
         dictionary = DictionaryConfig(
-            os.environ["DICTTERM_LANGUAGE"], dictionary.locale, dictionary.all_case_variants
+            language=os.environ["DICTTERM_LANGUAGE"],
+            locale=dictionary.locale,
+            variant=dictionary.variant,
+            all_case_variants=dictionary.all_case_variants,
         )
     if "DICTTERM_LOCALE" in os.environ:
         dictionary = DictionaryConfig(
-            dictionary.language, os.environ["DICTTERM_LOCALE"], dictionary.all_case_variants
+            language=dictionary.language,
+            locale=os.environ["DICTTERM_LOCALE"],
+            variant=dictionary.variant,
+            all_case_variants=dictionary.all_case_variants,
+        )
+    if "DICTTERM_VARIANT" in os.environ:
+        try:
+            variant = validate_managed_variant(os.environ["DICTTERM_VARIANT"])
+        except ValueError as exc:
+            allowed = ", ".join(MANAGED_VARIANTS)
+            raise ConfigError(f"invalid DICTTERM_VARIANT: expected one of: {allowed}") from exc
+        dictionary = DictionaryConfig(
+            language=dictionary.language,
+            locale=dictionary.locale,
+            variant=variant,
+            all_case_variants=dictionary.all_case_variants,
         )
     if "DICTTERM_ALL_CASE_VARIANTS" in os.environ:
         dictionary = DictionaryConfig(
-            dictionary.language,
-            dictionary.locale,
-            _env_bool("DICTTERM_ALL_CASE_VARIANTS", os.environ["DICTTERM_ALL_CASE_VARIANTS"]),
+            language=dictionary.language,
+            locale=dictionary.locale,
+            variant=dictionary.variant,
+            all_case_variants=_env_bool(
+                "DICTTERM_ALL_CASE_VARIANTS", os.environ["DICTTERM_ALL_CASE_VARIANTS"]
+            ),
         )
     if "DICTTERM_MODE" in os.environ:
         mode = os.environ["DICTTERM_MODE"]
         if mode not in {"auto", "tui", "plain"}:
             raise ConfigError("invalid DICTTERM_MODE: expected auto, tui, or plain")
-        display = DisplayConfig(mode, display.width, display.no_color)
+        display = DisplayConfig(mode=mode, width=display.width, no_color=display.no_color)
     if "DICTTERM_WIDTH" in os.environ:
         display = DisplayConfig(
-            display.mode, _env_int("DICTTERM_WIDTH", os.environ["DICTTERM_WIDTH"]), display.no_color
+            mode=display.mode,
+            width=_env_int("DICTTERM_WIDTH", os.environ["DICTTERM_WIDTH"]),
+            no_color=display.no_color,
         )
     if "DICTTERM_NO_COLOR" in os.environ:
         display = DisplayConfig(
-            display.mode,
-            display.width,
-            _env_bool("DICTTERM_NO_COLOR", os.environ["DICTTERM_NO_COLOR"]),
+            mode=display.mode,
+            width=display.width,
+            no_color=_env_bool("DICTTERM_NO_COLOR", os.environ["DICTTERM_NO_COLOR"]),
         )
     changes = {
         "enabled": _env_bool("DICTTERM_TTS_ENABLED", os.environ["DICTTERM_TTS_ENABLED"])
@@ -336,10 +376,16 @@ def resolve_settings(
     def explicit(value: object, current: object) -> object:
         return current if value is None else value
 
+    try:
+        variant = validate_managed_variant(str(explicit(overrides.variant, dictionary.variant)))
+    except ValueError as exc:
+        allowed = ", ".join(MANAGED_VARIANTS)
+        raise ConfigError(f"invalid dictionary variant: expected one of: {allowed}") from exc
     dictionary = DictionaryConfig(
-        explicit(overrides.language, dictionary.language),
-        explicit(overrides.locale, dictionary.locale),
-        explicit(overrides.all_case_variants, dictionary.all_case_variants),
+        language=str(explicit(overrides.language, dictionary.language)),
+        locale=explicit(overrides.locale, dictionary.locale),
+        variant=variant,
+        all_case_variants=bool(explicit(overrides.all_case_variants, dictionary.all_case_variants)),
     )
     mode = display.mode
     if overrides.plain:
@@ -354,6 +400,7 @@ def resolve_settings(
     return EffectiveSettings(
         language=dictionary.language,
         locale=dictionary.locale,
+        variant=dictionary.variant,
         all_case_variants=dictionary.all_case_variants,
         mode=display.mode,
         width=display.width,

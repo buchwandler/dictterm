@@ -11,10 +11,10 @@ leaving the user at the end of terminal scrollback.
 ## Requirements
 
 - Python 3.10+
-- `lexhint>=0.1.3`
+- `lexhint>=0.2.1`
 - `rich>=14.2`
 - `textual>=8.2.8,<9`
-- a Lexhint **rich** dataset for the language you want to query
+- a Lexhint **dictionary-capable** dataset for the language you want to query
 
 ## Install
 
@@ -22,7 +22,7 @@ Install dictterm and its Lexhint dependency from PyPI:
 
 ```bash
 python -m pip install dictterm
-lexhint dataset download en --variant rich
+lexhint dataset download en --variant dictionary
 dictterm lavish
 ```
 
@@ -38,7 +38,7 @@ For development, while Lexhint is installed from a checkout:
 ```bash
 python -m pip install -e ../lexhint
 python -m pip install -e . --no-deps
-lexhint dataset download en --variant rich
+lexhint dataset download en --variant dictionary
 dictterm lavish
 ```
 
@@ -79,6 +79,19 @@ for plain or other non-interactive invocations. Piped, redirected, captured, and
 input/output automatically use plain mode. `--tui` forces the viewer and requires both stdin and
 stdout to be terminals.
 
+## Dataset variants
+
+dictterm defaults to Lexhint's `dictionary` variant because it contains dictionary entries and
+lexical completion without the larger search indexes. Use `--variant rich` when a search-capable
+artifact is desired. Lexhint's `lexical` and `runtime` variants do not contain dictionary entries
+and cannot power the dictterm viewer.
+
+```bash
+dictterm love --variant dictionary
+dictterm love --variant rich
+dictterm love --variant dictionary --dataset-version 2026.08.20
+```
+
 Viewer keys:
 
 | Key                     | Action                            |
@@ -98,11 +111,12 @@ Viewer keys:
 | `q`                     | Quit                              |
 | `?`                     | Open key help (Esc / q closes it) |
 
-The CLI asks Lexhint for the installed `rich` artifact. It does **not** download, update, build, or
-mutate datasets. If the rich artifact is missing, the CLI points the user to:
+The CLI asks Lexhint for the configured dictionary-capable managed artifact. The default is
+`dictionary`; `rich` may be selected explicitly. It does **not** download, update, build, or mutate
+datasets. If the selected artifact is missing, the CLI points you to the matching Lexhint command:
 
 ```bash
-lexhint dataset download en --variant rich
+lexhint dataset download en --variant dictionary
 ```
 
 ## Configuration and TTS

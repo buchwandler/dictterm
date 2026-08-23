@@ -28,12 +28,13 @@ def test_default_path_uses_xdg(monkeypatch, tmp_path: Path) -> None:
 def test_valid_config_and_strict_validation(tmp_path: Path) -> None:
     path = tmp_path / "config.toml"
     path.write_text(
-        'version = 1\n[dictionary]\nlanguage = "de"\n'
+        'version = 1\n[dictionary]\nlanguage = "de"\nvariant = "rich"\n'
         '[display]\nmode = "plain"\nwidth = 80\n'
         "[tts]\nenabled = true\nspeed = 1.25\n"
     )
     config = load_config(path)
     assert config.dictionary.language == "de"
+    assert config.dictionary.variant == "rich"
     assert config.display.mode == "plain"
     assert config.tts.speed == 1.25
 
@@ -50,6 +51,26 @@ def test_version_type_and_speed_are_rejected(tmp_path: Path) -> None:
     path.write_text("[tts]\nspeed = 0\n")
     with pytest.raises(ConfigError, match="greater than 0"):
         load_config(path)
+
+
+def test_invalid_variant_is_rejected(tmp_path: Path) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text('[dictionary]\nvariant = "runtime"\n')
+    with pytest.raises(ConfigError, match="dictionary.*variant must be one of: dictionary, rich"):
+        load_config(path)
+
+
+def test_variant_precedence_defaults_config_environment_cli(monkeypatch, tmp_path: Path) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text('[dictionary]\nvariant = "rich"\n')
+    monkeypatch.setenv("DICTTERM_VARIANT", "rich")
+    args = Namespace(variant="dictionary")
+    settings = resolve_settings(args, load_config(path))
+    assert settings.variant == "dictionary"
+
+    monkeypatch.setenv("DICTTERM_VARIANT", "runtime")
+    with pytest.raises(ConfigError, match="invalid DICTTERM_VARIANT"):
+        resolve_settings(Namespace(), load_config(tmp_path / "missing.toml"))
 
 
 def test_precedence_defaults_config_environment_cli(monkeypatch, tmp_path: Path) -> None:

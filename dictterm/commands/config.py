@@ -59,6 +59,7 @@ def _show(args: argparse.Namespace, out: Console, err: Console) -> int:
     print(f"config          {path}")
     out.print(f"language        {settings.language}")
     out.print(f"locale          {settings.locale or '(none)'}")
+    out.print(f"variant         {settings.variant}")
     out.print(f"all_case_variants {'yes' if settings.all_case_variants else 'no'}")
     out.print(f"mode            {settings.mode}")
     out.print(f"width           {settings.width if settings.width is not None else '(auto)'}")

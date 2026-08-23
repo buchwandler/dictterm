@@ -16,6 +16,7 @@ from rich.text import Text
 from ..backend import LexhintBackend
 from ..cli_options import dictionary_source, entry_selection, view_options
 from ..config import ConfigError, SettingsOverrides, load_config, resolve_settings
+from ..dataset_policy import require_dictterm_capabilities
 from ..render import render_entries
 from ..selection import parse_pos_list
 
@@ -41,32 +42,33 @@ def add_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParse
     return parser
 
 
-def _open_lexicon(
-    source,
-    language: str,
-    lexicon_cls: type[Lexicon],
-) -> Lexicon:
+def _open_lexicon(source, settings, lexicon_cls: type[Lexicon]) -> Lexicon:
     if source.path is not None:
         if source.dataset_version is not None:
             raise ValueError("--path cannot be combined with --dataset-version")
-        return lexicon_cls.from_path(
+        if source.variant is not None:
+            raise ValueError("--path cannot be combined with --variant")
+        lexicon = lexicon_cls.from_path(
             source.path,
             language=source.language,
-            locale=source.locale,
+            locale=settings.locale,
         )
-    return lexicon_cls(
-        language,
-        variant="rich",
-        dataset_version=source.dataset_version,
-        locale=source.locale,
-    )
+    else:
+        lexicon = lexicon_cls(
+            settings.language,
+            variant=settings.variant,
+            dataset_version=source.dataset_version,
+            locale=settings.locale,
+        )
+    require_dictterm_capabilities(lexicon)
+    return lexicon
 
 
 def _open_backend(args: argparse.Namespace, settings, lexicon_cls: type[Lexicon]) -> LexhintBackend:
     source = dictionary_source(args)
     selection = entry_selection(args)
     return LexhintBackend(
-        _open_lexicon(source, settings.language, lexicon_cls),
+        _open_lexicon(source, settings, lexicon_cls),
         all_case_variants=settings.all_case_variants,
         include_pos=parse_pos_list(selection.include_pos),
         exclude_pos=parse_pos_list(selection.exclude_pos),
@@ -92,6 +94,13 @@ def _print_config_error(err: Console, exc: ConfigError) -> int:
 
 def _settings(args: argparse.Namespace):
     return resolve_settings(SettingsOverrides.from_namespace(args), load_config(args.config))
+
+
+def _dataset_install_command(language: str, variant: str, dataset_version: str | None) -> str:
+    command = f"lexhint dataset download {language} --variant {variant}"
+    if dataset_version is not None:
+        command += f" --version {dataset_version}"
+    return command
 
 
 def run(
@@ -144,9 +153,11 @@ def run(
         source = dictionary_source(args)
         if source.path is None and isinstance(exc, (LexiconNotInstalled, LexiconCapabilityError)):
             hint = Text("hint: ", style="dim")
-            hint.append("install a rich dictionary dataset with ")
+            hint.append("install the selected dictionary dataset with ")
             hint.append(
-                f"lexhint dataset download {settings.language} --variant rich",
+                _dataset_install_command(
+                    settings.language, settings.variant, source.dataset_version
+                ),
                 style="bold",
             )
             err.print(hint, soft_wrap=True)
