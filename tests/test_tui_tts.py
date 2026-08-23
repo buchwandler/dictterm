@@ -102,7 +102,22 @@ def _long_entry() -> DictionaryEntry:
     )
 
 
-@pytest.mark.parametrize("width", (40, 41, 42, 50))
+def test_semantic_rows_without_tts_keep_full_content_width() -> None:
+    async def scenario() -> None:
+        app = DictionaryViewerApp("compiler", (_long_entry(),))
+        async with app.run_test(size=(40, 12)) as pilot:
+            await pilot.pause()
+            rows = list(app.query(".semantic-row"))
+            assert rows
+            for row in rows:
+                content = row.query_one(".semantic-row-content")
+                assert not content.has_class("semantic-row-content-with-control")
+                assert content.content_region.right == content.region.right
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("width", (40, 41, 42, 44, 46, 50))
 def test_tts_read_controls_reserve_gutter_at_wrap_boundaries(width: int) -> None:
     async def scenario() -> None:
         app = DictionaryViewerApp(
@@ -124,7 +139,12 @@ def test_tts_read_controls_reserve_gutter_at_wrap_boundaries(width: int) -> None
                     continue
                 content = row.query_one(".semantic-row-content")
                 control = row_controls[0]
-                assert content.region.right + 1 <= control.region.x
+                assert content.has_class("semantic-row-content-with-control")
+                # The safety column must be inside the content widget, not outside
+                # it, so glyph overhang cannot be clipped at the content boundary.
+                assert content.region.right - content.content_region.right >= 1
+                assert content.content_region.right + 1 <= control.region.x
+                assert content.region.right <= control.region.x
                 assert control.region.right <= row.region.right
                 assert row.region.right <= scroll.region.right
                 assert control.region.width == 3

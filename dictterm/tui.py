@@ -139,13 +139,17 @@ Screen {
 }
 
 
+.semantic-row-content-with-control {
+    padding-right: 1;
+}
+
 
 .read-control {
     width: 3;
     min-width: 3;
     max-width: 3;
     height: 1;
-    margin-left: 1;
+    margin-left: 0;
     padding: 0;
     content-align: center middle;
 }
@@ -261,6 +265,12 @@ def _request(
     )
 
 
+def _semantic_content_classes(request: SpeechRequest | None) -> str:
+    if request is None:
+        return "semantic-row-content"
+    return "semantic-row-content semantic-row-content-with-control"
+
+
 class SemanticSection(Vertical):
     def __init__(
         self,
@@ -275,7 +285,10 @@ class SemanticSection(Vertical):
 
     def compose(self) -> ComposeResult:
         with Horizontal(classes="semantic-row"):
-            yield Static(Text(self.title, style="bold cyan"), classes="semantic-row-content")
+            yield Static(
+                Text(self.title, style="bold cyan"),
+                classes=_semantic_content_classes(self.request),
+            )
             if self.request is not None:
                 yield ReadControl(self.request)
         yield Static(self.body, classes="semantic-content")
@@ -308,7 +321,10 @@ class SenseView(Vertical):
             sense_index=self.sense_index,
         )
         with Horizontal(classes="semantic-row"):
-            yield Static(definition, classes="semantic-row-content")
+            yield Static(
+                definition,
+                classes=_semantic_content_classes(definition_request),
+            )
             if definition_request is not None:
                 yield ReadControl(definition_request)
         for example_index, example in enumerate(self.sense.examples):
@@ -323,7 +339,8 @@ class SenseView(Vertical):
             )
             with Horizontal(classes="semantic-row"):
                 yield Static(
-                    Text(f"“{example.text}”", style="italic dim"), classes="semantic-row-content"
+                    Text(f"“{example.text}”", style="italic dim"),
+                    classes=_semantic_content_classes(example_request),
                 )
                 if example_request is not None:
                     yield ReadControl(example_request)
@@ -352,7 +369,10 @@ class DefinitionsSection(Vertical):
             spoken_definitions(self.entry),
         )
         with Horizontal(classes="semantic-row"):
-            yield Static(Text("Definitions", style="bold cyan"), classes="semantic-row-content")
+            yield Static(
+                Text("Definitions", style="bold cyan"),
+                classes=_semantic_content_classes(definitions_request),
+            )
             if definitions_request is not None:
                 yield ReadControl(definitions_request)
         for sense_index, sense in enumerate(self.entry.senses):
