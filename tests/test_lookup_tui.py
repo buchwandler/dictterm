@@ -2,10 +2,16 @@ from __future__ import annotations
 
 import asyncio
 
-from lexhint import DictionaryEntry, Sense
-from textual.widgets import Footer, Input, OptionList
+from lexhint import DictionaryEntry, HeadwordRelation, Sense
+from textual.widgets import Footer, Input, OptionList, Static
 
-from dictterm.tui import DictionaryEntryView, DictionaryViewerApp, LookupScreen
+from dictterm.backend import LookupResult
+from dictterm.tui import (
+    DictionaryEntryView,
+    DictionaryViewerApp,
+    HeadwordRelationsSection,
+    LookupScreen,
+)
 
 
 def _entry(word: str, pos: str = "noun", long: bool = False) -> DictionaryEntry:
@@ -28,6 +34,9 @@ class FakeBackend:
             "loving": (_entry("loving"),),
             "long": (_entry("long", long=True),),
         }
+        self._relations = {
+            "lover": (HeadwordRelation("lover", "love", "related"),),
+        }
         self._completions = {
             "lov": ("love", "lover", "lovely"),
             "love": ("love", "lover"),
@@ -35,9 +44,9 @@ class FakeBackend:
             "lovely": ("lovely",),
         }
 
-    def entries(self, word: str) -> tuple[DictionaryEntry, ...]:
+    def lookup(self, word: str) -> LookupResult:
         self.lookup_calls.append(word)
-        return self._entries.get(word, ())
+        return LookupResult(word, self._entries.get(word, ()), self._relations.get(word, ()))
 
     def complete(self, prefix: str, *, limit: int = 20) -> tuple[str, ...]:
         self.complete_calls.append(prefix)
@@ -146,6 +155,49 @@ def test_escape_preserves_current_result_and_missing_exact_reopens_lookup() -> N
             assert app.word == "love"
             status = app.screen.query_one("#lookup-status").render().plain
             assert "No dictionary entry found" in status
+
+    asyncio.run(scenario())
+
+
+def test_relation_only_result_is_scrollable_and_excluded_from_entry_navigation() -> None:
+    async def scenario() -> None:
+        backend = FakeBackend()
+        relations = tuple(
+            HeadwordRelation("colours", f"colour-{index}", "related") for index in range(20)
+        )
+        app = DictionaryViewerApp(
+            backend,
+            result=LookupResult("colours", (), relations),
+        )
+        async with app.run_test(size=(40, 10)) as pilot:
+            await pilot.pause()
+            assert not app.query(DictionaryEntryView)
+            assert len(app.query(HeadwordRelationsSection)) == 1
+            assert "no direct entries" in app.query_one("#entry-nav").render().plain
+            assert app.query_one("#entry-scroll").max_scroll_y > 0
+            await pilot.press("1")
+            assert not app.query(DictionaryEntryView)
+
+    asyncio.run(scenario())
+
+
+def test_relation_section_is_replaced_with_each_lookup_result() -> None:
+    async def scenario() -> None:
+        backend = FakeBackend()
+        app = DictionaryViewerApp(backend, (_entry("love"),), word="love")
+        async with app.run_test(size=(80, 20)) as pilot:
+            screen = await _open_lookup(pilot)
+            await _replace_input(screen, pilot, "lover")
+            await pilot.press("enter")
+            await pilot.pause()
+            assert len(app.query(HeadwordRelationsSection)) == 1
+            assert "love" in app.query_one(".headword-relation", Static).render().plain
+
+            screen = await _open_lookup(pilot)
+            await _replace_input(screen, pilot, "lovely")
+            await pilot.press("enter")
+            await pilot.pause()
+            assert not app.query(HeadwordRelationsSection)
 
     asyncio.run(scenario())
 

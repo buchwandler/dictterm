@@ -24,9 +24,10 @@ def test_validate_managed_variant_normalizes_allowed_values() -> None:
     assert validate_managed_variant(" RICH ") == "rich"
 
 
-def test_validate_managed_variant_rejects_incompatible_values() -> None:
+@pytest.mark.parametrize("variant", ("lexical", "runtime"))
+def test_validate_managed_variant_rejects_incompatible_values(variant: str) -> None:
     with pytest.raises(ValueError, match="choose dictionary, rich"):
-        validate_managed_variant("runtime")
+        validate_managed_variant(variant)
 
 
 def test_require_dictterm_capabilities_accepts_dictionary_capable_artifact() -> None:

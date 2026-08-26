@@ -47,6 +47,9 @@ class FakeLexicon:
             return ()
         return self.results
 
+    def relations(self, word: str):
+        return ()
+
 
 @pytest.fixture(autouse=True)
 def reset_fake() -> None:

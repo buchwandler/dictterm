@@ -2,7 +2,15 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from lexhint import DictionaryEntry, Example, Form, Pronunciation, RelatedTerm, Sense
+from lexhint import (
+    DictionaryEntry,
+    Example,
+    Form,
+    HeadwordRelation,
+    Pronunciation,
+    RelatedTerm,
+    Sense,
+)
 from rich.console import Console, Group, RenderableType
 from rich.padding import Padding
 from rich.rule import Rule
@@ -10,6 +18,8 @@ from rich.style import Style
 from rich.table import Table
 from rich.text import Text
 from rich.theme import Theme
+
+from .backend import LookupResult
 
 WORD_STYLE = Style(bold=True)
 POS_STYLE = Style(bold=True, color="black", bgcolor="bright_cyan")
@@ -189,3 +199,69 @@ def render_entries(
             console.print(Rule(style="dim"))
             console.print()
         console.print(Group(*entry_renderables(entry)))
+
+
+RELATION_LABELS = {
+    "redirect": "Redirect",
+    "alternative": "Alternative",
+    "form_of": "Form of",
+    "synonym": "Synonyms",
+    "antonym": "Antonyms",
+    "hypernym": "Broader terms",
+    "hyponym": "Narrower terms",
+    "related": "Related",
+}
+
+
+def _relation_label(relation: str) -> str:
+    return RELATION_LABELS.get(relation, relation.replace("_", " ").title())
+
+
+def _headword_relation(relation: HeadwordRelation) -> Text:
+    text = Text("  ")
+    text.append(_relation_label(relation.relation), style=RELATION_STYLE)
+    text.append("  ")
+    text.append(relation.target)
+    if relation.tags:
+        text.append("  ")
+        text.append(", ".join(relation.tags), style=META_STYLE)
+    return text
+
+
+def _headword_relations(relations: Sequence[HeadwordRelation]) -> RenderableType | None:
+    if not relations:
+        return None
+    rows = Group(*(_headword_relation(relation) for relation in relations))
+    return Group(_heading("Relations"), Padding(rows, (1, 0, 0, 0)))
+
+
+def render_lookup(
+    console: Console,
+    result: LookupResult,
+    *,
+    empty_message: str | None = None,
+) -> None:
+    """Render entries and query-level headword relations for one lookup."""
+    if not result.entries:
+        if empty_message is not None:
+            message = Text(empty_message)
+        elif result.relations:
+            message = Text("No direct dictionary entry found for ")
+            message.append(repr(result.word), style="bold")
+            message.append(".")
+        else:
+            message = Text("No dictionary entry found for ")
+            message.append(repr(result.word), style="bold")
+            message.append(".")
+        console.print(message)
+    else:
+        for index, entry in enumerate(result.entries):
+            if index:
+                console.print()
+                console.print(Rule(style="dim"))
+                console.print()
+            console.print(Group(*entry_renderables(entry)))
+    relations = _headword_relations(result.relations)
+    if relations is not None:
+        console.print()
+        console.print(relations)

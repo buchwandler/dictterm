@@ -6,7 +6,7 @@ from collections import defaultdict
 from collections.abc import Sequence
 from contextlib import contextmanager
 
-from lexhint import DictionaryEntry, Sense
+from lexhint import DictionaryEntry, HeadwordRelation, Sense
 from rich.style import Style
 from rich.text import Text
 from textual import events
@@ -19,9 +19,9 @@ from textual.timer import Timer
 from textual.widgets import Footer, Input, OptionList, Static
 from textual.widgets.option_list import Option
 
-from .backend import DictionaryBackend
+from .backend import DictionaryBackend, LookupResult
 from .config import TTSConfig
-from .render import _entry_header
+from .render import _entry_header, _relation_label
 from .selection import normalize_pos
 from .speech import (
     PyKokoroSpeechService,
@@ -107,6 +107,20 @@ Screen {
     width: 1fr;
     height: auto;
     padding: 1 1 3 1;
+}
+
+
+.headword-relations-section {
+    width: 1fr;
+    height: auto;
+    padding: 1 1 2 1;
+}
+
+
+.headword-relation {
+    width: 1fr;
+    height: auto;
+    overflow-x: hidden;
 }
 
 
@@ -399,6 +413,22 @@ class DictionaryEntryView(Vertical):
         yield DefinitionsSection(self.entry, self.index, self.tts_config)
 
 
+class HeadwordRelationsSection(Vertical):
+    def __init__(self, relations: Sequence[HeadwordRelation]) -> None:
+        super().__init__(classes="headword-relations-section")
+        self.relations = tuple(relations)
+
+    def compose(self) -> ComposeResult:
+        yield Static(Text("Relations", style="bold cyan"), classes="semantic-content")
+        for relation in self.relations:
+            text = Text(f"{_relation_label(relation.relation)}  ", style="magenta")
+            text.append(relation.target)
+            if relation.tags:
+                text.append("  ")
+                text.append(", ".join(relation.tags), style="dim")
+            yield Static(text, classes="headword-relation")
+
+
 class HelpScreen(ModalScreen[None]):
     BINDINGS = [("escape", "close", "Close"), ("q", "close", "Close")]
 
@@ -567,12 +597,17 @@ class EntryScroll(VerticalScroll):
 
 
 class _StaticBackend:
-    def __init__(self, word: str, entries: Sequence[DictionaryEntry]) -> None:
+    def __init__(
+        self,
+        word: str,
+        entries: Sequence[DictionaryEntry],
+        relations: Sequence[HeadwordRelation] = (),
+    ) -> None:
         self.word = word
-        self._entries = tuple(entries)
+        self._result = LookupResult(word, tuple(entries), tuple(relations))
 
-    def entries(self, word: str) -> tuple[DictionaryEntry, ...]:
-        return self._entries if word == self.word else ()
+    def lookup(self, word: str) -> LookupResult:
+        return self._result if word == self.word else LookupResult(word, ())
 
     def complete(self, prefix: str, *, limit: int = 20) -> tuple[str, ...]:
         return ()
@@ -589,6 +624,7 @@ class DictionaryViewerApp(App[None]):
         backend_or_word: DictionaryBackend | str,
         entries: Sequence[DictionaryEntry] = (),
         *,
+        result: LookupResult | None = None,
         word: str | None = None,
         width: int | None = None,
         no_color: bool = False,
@@ -597,12 +633,19 @@ class DictionaryViewerApp(App[None]):
     ) -> None:
         super().__init__()
         if isinstance(backend_or_word, str):
-            self.backend: DictionaryBackend = _StaticBackend(backend_or_word, entries)
-            self.word = backend_or_word
+            initial_result = result or LookupResult(backend_or_word, tuple(entries))
+            self.backend: DictionaryBackend = _StaticBackend(
+                initial_result.word, initial_result.entries, initial_result.relations
+            )
+            self.result = initial_result
         else:
             self.backend = backend_or_word
-            self.word = word
-        self.entries = tuple(entries)
+            self.result = result
+            if self.result is None and word is not None:
+                self.result = LookupResult(word, tuple(entries))
+        self.word = self.result.word if self.result is not None else word
+        self.entries = self.result.entries if self.result is not None else tuple(entries)
+        self.relations = self.result.relations if self.result is not None else ()
         self.width = width
         self.no_color = no_color
         self.tts_config = tts_config or TTSConfig()
@@ -707,6 +750,8 @@ class DictionaryViewerApp(App[None]):
         with EntryScroll(id="entry-scroll"):
             for index, entry in enumerate(self.entries):
                 yield DictionaryEntryView(entry, index, self.tts_config)
+            if self.relations:
+                yield HeadwordRelationsSection(self.relations)
         yield ViewerFooter()
 
     def on_mount(self) -> None:
@@ -725,7 +770,7 @@ class DictionaryViewerApp(App[None]):
         if not self.word:
             return Text("dictterm  lookup mode")
         if not self.entries:
-            return Text(f"dictterm  {self.word}    no entries")
+            return Text(f"dictterm  {self.word}    no direct entries")
         entry = self.entries[self._active_index]
         text = Text(
             f"dictterm  {self.word}    entry {self._active_index + 1}/{len(self.entries)}    "
@@ -814,14 +859,15 @@ class DictionaryViewerApp(App[None]):
         target = next((index for index in indices if index > current), indices[0])
         self._jump_to_entry(target)
 
-    def _mount_replacement(self, entries: tuple[DictionaryEntry, ...]) -> None:
+    def _mount_replacement(self, result: LookupResult) -> None:
         scroll = self.query_one("#entry-scroll", EntryScroll)
-        scroll.mount(
-            *(
-                DictionaryEntryView(entry, index, self.tts_config)
-                for index, entry in enumerate(entries)
-            )
-        )
+        children = [
+            DictionaryEntryView(entry, index, self.tts_config)
+            for index, entry in enumerate(result.entries)
+        ]
+        if result.relations:
+            children.append(HeadwordRelationsSection(result.relations))
+        scroll.mount(*children)
         scroll.scroll_home(animate=False, immediate=True)
         self._entry_offsets = ()
         self._entry_heights = ()
@@ -835,18 +881,22 @@ class DictionaryViewerApp(App[None]):
         self._sync_active_index()
         scroll.focus(scroll_visible=False)
 
-    def _set_result(self, word: str, entries: Sequence[DictionaryEntry]) -> None:
-        self.word = word
-        self.entries = tuple(entries)
+    def _set_result(self, result: LookupResult) -> None:
+        self.result = result
+        self.word = result.word
+        self.entries = result.entries
+        self.relations = result.relations
         self._active_index = 0
         self._reindex_entries()
         self._entry_offsets = ()
         self._entry_heights = ()
         self._update_navigation()
         scroll = self.query_one("#entry-scroll", EntryScroll)
-        old_views = list(self.query(DictionaryEntryView))
+        old_views = list(self.query(DictionaryEntryView)) + list(
+            self.query(HeadwordRelationsSection)
+        )
         scroll.remove_children(old_views)
-        self.call_after_refresh(lambda: self._mount_replacement(self.entries))
+        self.call_after_refresh(lambda: self._mount_replacement(result))
 
     def _reopen_lookup(self, seed: str, error: str) -> None:
         self.push_screen(
@@ -858,14 +908,14 @@ class DictionaryViewerApp(App[None]):
         if selected is None:
             return
         try:
-            entries = self.backend.entries(selected)
+            result = self.backend.lookup(selected)
         except Exception as exc:
             self._reopen_lookup(selected, f"Lookup error: {exc}")
             return
-        if not entries:
+        if not result.entries and not result.relations:
             self._reopen_lookup(selected, f'No dictionary entry found for "{selected}".')
             return
-        self._set_result(selected, entries)
+        self._set_result(result)
 
     def action_lookup(self) -> None:
         self.push_screen(
@@ -942,6 +992,7 @@ def run_viewer(
     *,
     word: str | None = None,
     entries: Sequence[DictionaryEntry] = (),
+    result: LookupResult | None = None,
     width: int | None = None,
     no_color: bool = False,
     tts_config: TTSConfig | None = None,
@@ -950,6 +1001,7 @@ def run_viewer(
     app = DictionaryViewerApp(
         backend,
         entries,
+        result=result,
         word=word,
         width=width,
         no_color=no_color,

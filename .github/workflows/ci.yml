@@ -25,6 +25,13 @@ jobs:
           cache: pip
       - name: Install development dependencies
         run: python -m pip install -e ".[dev]"
+      - name: Check Lexhint schema contract
+        run: |
+          python - <<'PY'
+          import lexhint
+          assert lexhint.SCHEMA_VERSION == "10", lexhint.SCHEMA_VERSION
+          print("Lexhint schema:", lexhint.SCHEMA_VERSION)
+          PY
       - name: Run tests
         run: python -m pytest -q
       - name: Check Ruff lint

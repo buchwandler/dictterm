@@ -130,7 +130,7 @@ def test_streaming_failure_is_generic_speech_error(monkeypatch) -> None:
 
 
 def test_structured_speech_text_omits_visual_metadata() -> None:
-    from lexhint import DictionaryEntry, Example, Form, Sense
+    from lexhint import DictionaryEntry, Example, ExternalSenseId, Form, Sense
 
     from dictterm.speech import spoken_definition, spoken_definitions, spoken_forms
 
@@ -142,6 +142,8 @@ def test_structured_speech_text_omits_visual_metadata() -> None:
                 glosses=("To postpone or delay.",),
                 tags=("transitive",),
                 topics=("time",),
+                sense_id="lh1-en-test",
+                source_ids=(ExternalSenseId("wikidata", "Q1"),),
                 examples=(Example("Wait until Monday.", "Attendre lundi."),),
             ),
         ),
@@ -152,3 +154,6 @@ def test_structured_speech_text_omits_visual_metadata() -> None:
     assert spoken_definitions(entry) == "To postpone or delay. Example: Wait until Monday."
     assert "/" not in spoken_definitions(entry)
     assert "Attendre" not in spoken_definitions(entry)
+    assert "lh1-en-test" not in spoken_definitions(entry)
+    assert "wikidata" not in spoken_definitions(entry)
+    assert "Q1" not in spoken_definitions(entry)

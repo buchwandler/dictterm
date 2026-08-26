@@ -3,10 +3,19 @@ from __future__ import annotations
 from io import StringIO
 
 import pytest
-from lexhint import DictionaryEntry, Example, Form, Pronunciation, Sense
+from lexhint import (
+    DictionaryEntry,
+    Example,
+    ExternalSenseId,
+    Form,
+    HeadwordRelation,
+    Pronunciation,
+    Sense,
+)
 from rich.console import Console
 
-from dictterm.render import THEME, render_entries
+from dictterm.backend import LookupResult
+from dictterm.render import THEME, render_entries, render_lookup
 
 
 def test_render_all_optional_fields_at_narrow_width() -> None:
@@ -25,6 +34,8 @@ def test_render_all_optional_fields_at_narrow_width() -> None:
                 topics=("transport",),
                 examples=(Example("Die Straße ist lang.", "The street is long."),),
                 synonyms=("road",),
+                sense_id="lh1-en-test",
+                source_ids=(ExternalSenseId("wikidata", "Q1"),),
                 antonyms=("dead end",),
             ),
         ),
@@ -51,6 +62,9 @@ def test_render_all_optional_fields_at_narrow_width() -> None:
         "antonyms: dead end",
     ):
         assert expected in output
+    assert "lh1-en-test" not in output
+    assert "wikidata" not in output
+    assert "Q1" not in output
 
 
 def _render_defer_forms(width: int) -> str:
@@ -115,3 +129,50 @@ def test_render_custom_empty_message() -> None:
     console = Console(file=stream, force_terminal=False, no_color=True, width=40)
     render_entries(console, "love", (), empty_message="No verb entry found for 'love'.")
     assert stream.getvalue().strip() == "No verb entry found for 'love'."
+
+
+def test_render_lookup_groups_relations_and_preserves_tags() -> None:
+    entry = DictionaryEntry(
+        word="color",
+        pos="noun",
+        senses=(Sense(glosses=("A hue.",)),),
+    )
+    result = LookupResult(
+        word="color",
+        entries=(entry,),
+        relations=(
+            HeadwordRelation("color", "colour", "alternative", ("British",)),
+            HeadwordRelation("color", "shade", "unknown_relation", ("rare",)),
+        ),
+    )
+    stream = StringIO()
+    console = Console(theme=THEME, file=stream, force_terminal=False, no_color=True, width=40)
+
+    render_lookup(console, result)
+
+    output = stream.getvalue()
+    assert output.count("Relations") == 1
+    assert "Alternative" in output
+    assert "colour" in output
+    assert "British" in output
+    assert "Unknown Relation" in output
+    assert "shade" in output
+
+
+def test_render_lookup_relation_only_result_is_informative_at_narrow_width() -> None:
+    result = LookupResult(
+        word="colours",
+        entries=(),
+        relations=(HeadwordRelation("colours", "color", "form_of"),),
+    )
+    stream = StringIO()
+    console = Console(theme=THEME, file=stream, force_terminal=False, no_color=True, width=40)
+
+    render_lookup(console, result)
+
+    output = stream.getvalue()
+    assert "No direct dictionary entry found for" in output
+    assert "'colours'." in output
+    assert "Relations" in output
+    assert "Form of" in output
+    assert "color" in output

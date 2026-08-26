@@ -17,7 +17,7 @@ from ..backend import LexhintBackend
 from ..cli_options import dictionary_source, entry_selection, view_options
 from ..config import ConfigError, SettingsOverrides, load_config, resolve_settings
 from ..dataset_policy import require_dictterm_capabilities
-from ..render import render_entries
+from ..render import render_lookup
 from ..selection import parse_pos_list
 
 
@@ -137,7 +137,7 @@ def run(
                 open_lookup_on_mount=True,
             )
             return 0
-        entries = backend.entries(args.word)
+        result = backend.lookup(args.word)
     except (
         LexiconCapabilityError,
         LexiconCoverageError,
@@ -163,7 +163,7 @@ def run(
             err.print(hint, soft_wrap=True)
         return 2
 
-    if not entries:
+    if not result.entries and not result.relations:
         selection = entry_selection(args)
         empty_message = None
         if selection.include_pos or selection.exclude_pos:
@@ -176,7 +176,7 @@ def run(
             else:
                 label = f"not {excluded}"
             empty_message = f"No {label} entry found for {args.word!r}."
-        render_entries(out, args.word, entries, empty_message=empty_message)
+        render_lookup(out, result, empty_message=empty_message)
         return 1
 
     if use_tui:
@@ -184,12 +184,11 @@ def run(
 
         run_viewer(
             backend,
-            word=args.word,
-            entries=entries,
+            result=result,
             width=settings.width,
             no_color=settings.no_color,
             tts_config=settings.tts,
         )
     else:
-        render_entries(out, args.word, entries)
-    return 0
+        render_lookup(out, result)
+    return 0 if result.entries else 1

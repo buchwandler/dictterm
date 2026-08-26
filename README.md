@@ -11,10 +11,16 @@ leaving the user at the end of terminal scrollback.
 ## Requirements
 
 - Python 3.10+
-- `lexhint>=0.2.1`
+- `lexhint>=0.4.0`
 - `rich>=14.2`
 - `textual>=8.2.8,<9`
 - a Lexhint **dictionary-capable** dataset for the language you want to query
+
+## Lexhint schema compatibility
+
+Dictterm requires a Lexhint schema 10 release and a schema 10 dictionary-capable artifact. Lexhint owns schema compatibility and rejects older artifacts. Schema 9 artifacts are not migrated in place. Install or rebuild the corresponding schema 10 dataset with Lexhint before using Dictterm.
+
+Headword-level relations supplied by Lexhint are shown as query-level context in plain output and the TUI. Lexhint sense IDs and source provenance remain opaque machine metadata and are not displayed or spoken by default.
 
 ## Install
 
