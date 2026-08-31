@@ -12,10 +12,11 @@ from . import __version__
 from .cli_options import ViewOptions
 from .commands import config as config_command
 from .commands import lookup as lookup_command
+from .commands import pronunciation as pronunciation_command
 from .commands import tts as tts_command
 from .render import THEME
 
-_COMMANDS = frozenset({"lookup", "config", "tts"})
+_COMMANDS = frozenset({"lookup", "config", "tts", "pronunciation"})
 _ROOT_ACTIONS = frozenset({"-h", "--help", "--version"})
 
 
@@ -44,6 +45,7 @@ def _parser() -> argparse.ArgumentParser:
     lookup_command.add_parser(commands)
     config_command.add_parser(commands)
     tts_command.add_parser(commands)
+    pronunciation_command.add_parser(commands)
     return parser
 
 
@@ -85,5 +87,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return config_command.run(args, out, err)
     if args.command == "tts":
         return tts_command.run(args, out, err)
+    if args.command == "pronunciation":
+        return pronunciation_command.run(args, out, err, lexicon_cls=Lexicon)
     parser.error(f"unknown command: {args.command}")
     return 2

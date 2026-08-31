@@ -11,7 +11,7 @@ leaving the user at the end of terminal scrollback.
 ## Requirements
 
 - Python 3.10+
-- `lexhint>=0.4.0`
+- `lexhint>=0.4.2`
 - `rich>=14.2`
 - `textual>=8.2.8,<9`
 - a Lexhint **dictionary-capable** dataset for the language you want to query
@@ -55,6 +55,7 @@ dictterm [WORD] [lookup options]
 dictterm lookup [WORD] [lookup options]
 dictterm config path|init|show [options]
 dictterm tts check [options]
+dictterm pronunciation WORD [pronunciation options]
 ```
 
 The normal dictionary action stays short. These forms are equivalent lookup entry points:
@@ -73,7 +74,7 @@ dictterm love --plain              # one-shot output
 dictterm --plain love              # shorthand options may precede WORD
 ```
 
-At argv position 1, `lookup`, `config`, and `tts` are reserved command families. Use
+At argv position 1, `lookup`, `config`, `tts`, and `pronunciation` are reserved command families. Use
 `dictterm lookup WORD` when the word itself is reserved. `dictterm` and `dictterm lookup`
 open interactive lookup mode in a terminal. Outside a terminal, a word is required and
 the command uses plain output. `--tui` forces the viewer and requires terminal input/output.
@@ -85,6 +86,19 @@ for plain or other non-interactive invocations. Piped, redirected, captured, and
 input/output automatically use plain mode. `--tui` forces the viewer and requires both stdin and
 stdout to be terminals.
 
+## Pronunciation lookup
+
+Use the focused pronunciation command when definitions and other dictionary metadata are not needed:
+
+```bash
+dictterm pronunciation love
+dictterm pronunciation love --region Canada
+dictterm pronunciation love --locale en_CA
+dictterm pronunciation love --locale en_US --include-neutral
+dictterm pronunciation love --pos noun,verb
+```
+
+Pronunciations are grouped by part of speech and retain Lexhint's source tags. `--region` performs exact normalized source-tag matching; `--locale` uses Lexhint's locale profile, including `en_CA`, `en_US`, and `en_GB`. `--include-neutral` requires a region or locale. A valid lookup with no matching pronunciation prints an explanation and exits with status 0.
 ## Dataset variants
 
 dictterm defaults to Lexhint's `dictionary` variant because it contains dictionary entries and
@@ -97,6 +111,18 @@ dictterm love --variant dictionary
 dictterm love --variant rich
 dictterm love --variant dictionary --dataset-version 2026.08.20
 ```
+
+
+Lexhint 0.4.2 also provides explicit catalog-backed dataset operations. Dictterm does not invoke these operations or contact the network automatically:
+
+```bash
+lexhint dataset available
+lexhint dataset check
+lexhint dataset update
+lexhint dataset download en --variant dictionary
+```
+
+Use `available` to inspect compatible releases, `check` to inspect installed updates, and `update` to refresh installed languages and variants. Dataset catalog caching, downloads, integrity checks, and updates remain owned by Lexhint.
 
 Viewer keys:
 

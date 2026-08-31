@@ -58,6 +58,10 @@ def reset_fake() -> None:
     FakeLexicon.results = (_entry("word", "noun"),)
 
 
+def test_pronunciation_is_a_reserved_command() -> None:
+    assert cli.normalize_argv(["pronunciation", "love"]) == ["pronunciation", "love"]
+
+
 def test_cli_lookup_uses_managed_english_dictionary_dataset(monkeypatch, capsys) -> None:
     monkeypatch.setattr(cli, "Lexicon", FakeLexicon)
     assert cli.main(["word", "--no-color"]) == 0

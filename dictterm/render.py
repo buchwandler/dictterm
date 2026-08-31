@@ -8,6 +8,7 @@ from lexhint import (
     Form,
     HeadwordRelation,
     Pronunciation,
+    PronunciationGroup,
     RelatedTerm,
     Sense,
 )
@@ -265,3 +266,39 @@ def render_lookup(
     if relations is not None:
         console.print()
         console.print(relations)
+
+
+def _pronunciation_group(group: PronunciationGroup) -> RenderableType:
+    body = Text()
+    for index, pronunciation in enumerate(group.pronunciations):
+        if index:
+            body.append("\n")
+        body.append("    ")
+        body.append(pronunciation.ipa)
+        if pronunciation.tags:
+            body.append("  ")
+            body.append(", ".join(pronunciation.tags), style=META_STYLE)
+    return Group(Text(f"  {group.pos}", style=POS_STYLE), body)
+
+
+def render_pronunciations(
+    console: Console,
+    word: str,
+    groups: Sequence[PronunciationGroup],
+    *,
+    region: str | None = None,
+    locale: str | None = None,
+) -> None:
+    """Render grouped pronunciation data without dictionary definitions."""
+    console.print(Text(word, style=WORD_STYLE))
+    if not groups:
+        message = Text("No pronunciations found")
+        if region is not None:
+            message = Text(f"No pronunciations matched region {region!r}")
+        elif locale is not None:
+            message = Text(f"No pronunciations matched locale {locale!r}")
+        message.append(f" for {word!r}.")
+        console.print(message)
+        return
+    for group in groups:
+        console.print(_pronunciation_group(group))

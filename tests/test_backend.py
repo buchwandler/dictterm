@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from lexhint import DictionaryEntry, HeadwordRelation, Sense
+from lexhint import DictionaryEntry, HeadwordRelation, PronunciationGroup, Sense
 
 from dictterm.backend import LexhintBackend, LookupResult
 
@@ -26,6 +26,9 @@ class FakeLexicon:
     def relations(self, word: str):
         self.relations_calls.append(word)
         return (HeadwordRelation(word, "adore", "synonym", ("formal",)),)
+
+    def pronunciations(self, word: str, **kwargs: object):
+        return (PronunciationGroup("noun", ()),)
 
     def complete(self, prefix: str, *, limit: int = 20):
         self.complete_calls.append((prefix, limit))
@@ -57,6 +60,15 @@ def test_backend_lookup_returns_entries_and_relations_together() -> None:
     assert result.relations == (HeadwordRelation("love", "adore", "synonym", ("formal",)),)
     assert lexicon.entry_calls == [("love", True)]
     assert lexicon.relations_calls == ["love"]
+
+
+def test_backend_forwards_pronunciation_filters() -> None:
+    lexicon = FakeLexicon()
+    backend = LexhintBackend(lexicon, include_pos=("noun",), exclude_pos=("verb",))
+
+    groups = backend.pronunciations("love", region="Canada", include_neutral=True)
+
+    assert groups[0].pos == "noun"
 
 
 def test_backend_forwards_bounded_completions() -> None:

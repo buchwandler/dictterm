@@ -9,7 +9,7 @@ from lexhint.builder import build_dictionary
 from rich.console import Console
 
 from dictterm.backend import LexhintBackend
-from dictterm.render import THEME, render_lookup
+from dictterm.render import THEME, render_lookup, render_pronunciations
 
 
 def test_dictterm_consumes_generated_schema10_artifact(tmp_path: Path) -> None:
@@ -22,6 +22,11 @@ def test_dictterm_consumes_generated_schema10_artifact(tmp_path: Path) -> None:
                     "word": "love",
                     "lang_code": "en",
                     "pos": "verb",
+                    "sounds": [
+                        {"ipa": "/love-canada/", "tags": ["Canada"]},
+                        {"ipa": "/love-american/", "tags": ["General-American"]},
+                        {"ipa": "/love-neutral/", "tags": []},
+                    ],
                     "redirects": ["loving"],
                     "senses": [
                         {
@@ -64,6 +69,16 @@ def test_dictterm_consumes_generated_schema10_artifact(tmp_path: Path) -> None:
     assert result.relations == (HeadwordRelation("love", "loving", "redirect"),)
     assert "love" in backend.complete("lov")
     assert "lover" in backend.complete("lov")
+    groups = backend.pronunciations("love", region="Canada")
+    assert [group.pos for group in groups] == ["verb"]
+    assert [item.ipa for item in groups[0].pronunciations] == ["/love-canada/"]
+    locale_groups = Lexicon.from_path(database, locale="en_CA").pronunciations(
+        "love", include_neutral=True
+    )
+    assert [item.ipa for item in locale_groups[0].pronunciations] == [
+        "/love-canada/",
+        "/love-neutral/",
+    ]
 
     stream = StringIO()
     console = Console(theme=THEME, file=stream, force_terminal=False, no_color=True, width=80)
@@ -73,3 +88,12 @@ def test_dictterm_consumes_generated_schema10_artifact(tmp_path: Path) -> None:
     assert "Redirect" in output
     assert "loving" in output
     assert result.entries[0].senses[0].sense_id not in output
+
+    pronunciation_stream = StringIO()
+    pronunciation_console = Console(
+        theme=THEME, file=pronunciation_stream, force_terminal=False, no_color=True, width=80
+    )
+    render_pronunciations(pronunciation_console, "love", groups)
+    pronunciation_output = pronunciation_stream.getvalue()
+    assert "/love-canada/  Canada" in pronunciation_output
+    assert "To care deeply." not in pronunciation_output

@@ -28,9 +28,12 @@ jobs:
         run: |
           python - <<'PY'
           import lexhint
+          from lexhint import Lexicon, PronunciationGroup
+          version = tuple(int(part) for part in lexhint.__version__.split(".")[:3])
+          assert version >= (0, 4, 2), lexhint.__version__
           assert lexhint.SCHEMA_VERSION == "10", lexhint.SCHEMA_VERSION
-          print("Lexhint schema:", lexhint.SCHEMA_VERSION)
-          PY
+          assert PronunciationGroup and hasattr(Lexicon, "pronunciations")
+          print("Lexhint:", lexhint.__version__, "schema:", lexhint.SCHEMA_VERSION)
       - name: Build distributions
         run: python -m build
       - name: Run tests
