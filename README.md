@@ -99,6 +99,7 @@ dictterm pronunciation love --pos noun,verb
 ```
 
 Pronunciations are grouped by part of speech and retain Lexhint's source tags. `--region` performs exact normalized source-tag matching; `--locale` uses Lexhint's locale profile, including `en_CA`, `en_US`, and `en_GB`. `--include-neutral` requires a region or locale. A valid lookup with no matching pronunciation prints an explanation and exits with status 0.
+
 ## Dataset variants
 
 dictterm defaults to Lexhint's `dictionary` variant because it contains dictionary entries and
@@ -111,7 +112,6 @@ dictterm love --variant dictionary
 dictterm love --variant rich
 dictterm love --variant dictionary --dataset-version 2026.08.20
 ```
-
 
 Lexhint 0.4.2 also provides explicit catalog-backed dataset operations. Dictterm does not invoke these operations or contact the network automatically:
 
